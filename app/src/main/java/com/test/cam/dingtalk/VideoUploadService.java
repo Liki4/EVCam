@@ -32,9 +32,10 @@ public class VideoUploadService {
      * 上传视频文件到钉钉
      * @param videoFiles 视频文件列表
      * @param conversationId 钉钉会话 ID
+     * @param userId 钉钉用户 ID（用于发送文件消息）
      * @param callback 上传回调
      */
-    public void uploadVideos(List<File> videoFiles, String conversationId, UploadCallback callback) {
+    public void uploadVideos(List<File> videoFiles, String conversationId, String userId, UploadCallback callback) {
         new Thread(() -> {
             try {
                 if (videoFiles == null || videoFiles.isEmpty()) {
@@ -60,8 +61,8 @@ public class VideoUploadService {
                         // 上传文件到钉钉
                         String mediaId = apiClient.uploadFile(videoFile);
 
-                        // 发送文件消息到群聊
-                        apiClient.sendFileMessage(conversationId, mediaId, videoFile.getName());
+                        // 发送文件消息到群聊，传递 userId
+                        apiClient.sendFileMessage(conversationId, mediaId, videoFile.getName(), userId);
 
                         uploadedFiles.add(videoFile.getName());
                         Log.d(TAG, "视频上传成功: " + videoFile.getName());
@@ -92,9 +93,9 @@ public class VideoUploadService {
     /**
      * 上传单个视频文件
      */
-    public void uploadVideo(File videoFile, String conversationId, UploadCallback callback) {
+    public void uploadVideo(File videoFile, String conversationId, String userId, UploadCallback callback) {
         List<File> files = new ArrayList<>();
         files.add(videoFile);
-        uploadVideos(files, conversationId, callback);
+        uploadVideos(files, conversationId, userId, callback);
     }
 }

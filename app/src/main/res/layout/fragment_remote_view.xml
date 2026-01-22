@@ -42,7 +42,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="ClientId"
+            android:text="ClientId / AppKey"
             android:textColor="#CCCCCC"
             android:textSize="14sp"
             android:layout_marginBottom="8dp" />
@@ -51,7 +51,7 @@
             android:id="@+id/et_client_id"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="请输入钉钉应用的 ClientId"
+            android:hint="请输入钉钉应用的 ClientId (也叫 AppKey)"
             android:textColor="#FFFFFF"
             android:textColorHint="#666666"
             android:background="@android:drawable/edit_text"
@@ -62,7 +62,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="ClientSecret"
+            android:text="ClientSecret / AppSecret"
             android:textColor="#CCCCCC"
             android:textSize="14sp"
             android:layout_marginBottom="8dp" />
@@ -71,7 +71,7 @@
             android:id="@+id/et_client_secret"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="请输入钉钉应用的 ClientSecret"
+            android:hint="请输入钉钉应用的 ClientSecret (也叫 AppSecret)"
             android:textColor="#FFFFFF"
             android:textColorHint="#666666"
             android:background="@android:drawable/edit_text"

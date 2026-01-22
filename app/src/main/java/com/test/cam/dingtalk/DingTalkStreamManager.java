@@ -40,7 +40,7 @@ public class DingTalkStreamManager {
     }
 
     public interface CommandCallback {
-        void onRecordCommand(String conversationId);
+        void onRecordCommand(String conversationId, String userId);
     }
 
     public DingTalkStreamManager(Context context, DingTalkConfig config,
@@ -163,6 +163,7 @@ public class DingTalkStreamManager {
                 String content = null;
                 String conversationId = null;
                 String senderId = null;
+                String sessionWebhook = null;
 
                 // 解析文本内容 - 钉钉机器人消息格式
                 if (message.has("text")) {
@@ -187,6 +188,9 @@ public class DingTalkStreamManager {
                     senderId = message.optString("senderId", "");
                 }
 
+                // 获取 sessionWebhook（用于回复消息）
+                sessionWebhook = message.optString("sessionWebhook", "");
+
                 // 如果消息为空，可能是其他类型的事件（如加入群聊等），直接返回成功
                 if (content == null || content.isEmpty()) {
                     Log.d(TAG, "消息内容为空，可能是非文本消息或系统事件");
@@ -197,10 +201,11 @@ public class DingTalkStreamManager {
                 Log.d(TAG, "解析成功 - 内容: " + content);
                 Log.d(TAG, "解析成功 - 会话ID: " + conversationId);
                 Log.d(TAG, "解析成功 - 发送者ID: " + senderId);
+                Log.d(TAG, "解析成功 - SessionWebhook: " + sessionWebhook);
 
-                // 检查会话ID是否有效
-                if (conversationId.isEmpty()) {
-                    Log.w(TAG, "会话ID为空，无法回复");
+                // 检查 sessionWebhook 是否有效
+                if (sessionWebhook.isEmpty()) {
+                    Log.w(TAG, "SessionWebhook 为空，无法回复");
                     return EventAckStatus.SUCCESS;
                 }
 
@@ -212,21 +217,22 @@ public class DingTalkStreamManager {
                     Log.d(TAG, "收到录制指令");
 
                     // 发送确认消息
-                    sendResponse(conversationId, "收到录制指令，开始录制 1 分钟视频...");
+                    sendResponse(sessionWebhook, "收到录制指令，开始录制 1 分钟视频...");
 
-                    // 通知监听器执行录制
+                    // 通知监听器执行录制，传递 senderId
                     String finalConversationId = conversationId;
-                    mainHandler.post(() -> commandCallback.onRecordCommand(finalConversationId));
+                    String finalSenderId = senderId;
+                    mainHandler.post(() -> commandCallback.onRecordCommand(finalConversationId, finalSenderId));
 
                 } else if ("帮助".equals(command) || "help".equalsIgnoreCase(command)) {
-                    sendResponse(conversationId,
+                    sendResponse(sessionWebhook,
                         "可用指令：\n" +
                         "• 录制 - 开始录制 1 分钟视频\n" +
                         "• 帮助 - 显示此帮助信息");
 
                 } else {
                     Log.d(TAG, "未识别的指令: " + command);
-                    sendResponse(conversationId,
+                    sendResponse(sessionWebhook,
                         "未识别的指令。发送「帮助」查看可用指令。");
                 }
 
@@ -253,12 +259,12 @@ public class DingTalkStreamManager {
         }
 
         /**
-         * 发送响应消息到钉钉
+         * 发送响应消息到钉钉（使用 sessionWebhook）
          */
-        private void sendResponse(String conversationId, String message) {
+        private void sendResponse(String sessionWebhook, String message) {
             new Thread(() -> {
                 try {
-                    apiClient.sendTextMessage(conversationId, message);
+                    apiClient.sendMessageViaWebhook(sessionWebhook, message);
                     Log.d(TAG, "响应消息已发送: " + message);
                 } catch (Exception e) {
                     Log.e(TAG, "发送响应消息失败", e);

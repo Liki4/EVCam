@@ -40,7 +40,7 @@ public class DingTalkApiClient {
     }
 
     /**
-     * 获取 Access Token (新版 OAuth 2.0)
+     * 获取 Access Token (使用旧版 API)
      */
     public String getAccessToken() throws IOException {
         // 检查缓存的 token 是否有效
@@ -50,22 +50,15 @@ public class DingTalkApiClient {
             return cachedToken;
         }
 
-        // 获取新的 token
-        String url = BASE_URL + "/v1.0/oauth2/accessToken";
-
-        JsonObject body = new JsonObject();
-        body.addProperty("clientId", config.getClientId());
-        body.addProperty("clientSecret", config.getClientSecret());
-        body.addProperty("grantType", "client_credentials");
+        // 获取新的 token - 使用旧版 API
+        String url = OAPI_URL + "/gettoken?appkey=" + config.getClientId() +
+                     "&appsecret=" + config.getClientSecret();
 
         Log.d(TAG, "正在获取新的 Access Token...");
 
         Request request = new Request.Builder()
                 .url(url)
-                .post(RequestBody.create(
-                        MediaType.parse("application/json"),
-                        gson.toJson(body)
-                ))
+                .get()
                 .build();
 
         try (Response response = httpClient.newCall(request).execute()) {
@@ -78,9 +71,18 @@ public class DingTalkApiClient {
 
             JsonObject jsonResponse = gson.fromJson(responseBody, JsonObject.class);
 
-            if (jsonResponse.has("accessToken")) {
-                String accessToken = jsonResponse.get("accessToken").getAsString();
-                long expireIn = jsonResponse.get("expireIn").getAsLong();
+            // 检查错误码
+            if (jsonResponse.has("errcode")) {
+                int errcode = jsonResponse.get("errcode").getAsInt();
+                if (errcode != 0) {
+                    String errmsg = jsonResponse.has("errmsg") ? jsonResponse.get("errmsg").getAsString() : "Unknown error";
+                    throw new IOException("获取 Access Token 失败: errcode=" + errcode + ", errmsg=" + errmsg);
+                }
+            }
+
+            if (jsonResponse.has("access_token")) {
+                String accessToken = jsonResponse.get("access_token").getAsString();
+                long expireIn = jsonResponse.get("expires_in").getAsLong();
 
                 // 提前 5 分钟过期
                 long expireTime = System.currentTimeMillis() + (expireIn - 300) * 1000;
@@ -89,39 +91,32 @@ public class DingTalkApiClient {
                 Log.d(TAG, "Access Token 获取成功");
                 return accessToken;
             } else {
-                throw new IOException("响应中没有 accessToken: " + responseBody);
+                throw new IOException("响应中没有 access_token: " + responseBody);
             }
         }
     }
 
     /**
-     * 发送文本消息到群聊
+     * 通过 sessionWebhook 发送文本消息（推荐方式）
      */
-    public void sendTextMessage(String conversationId, String text) throws IOException {
-        String accessToken = getAccessToken();
-        String url = BASE_URL + "/v1.0/robot/oToMessages/batchSend";
-
-        // 构建消息参数 - 正确的格式
-        JsonObject msgParam = new JsonObject();
-        msgParam.addProperty("content", text);
-
-        JsonObject body = new JsonObject();
-        body.addProperty("robotCode", config.getClientId());
-        body.addProperty("userIds", "[]");  // 空数组表示发送给群聊
-        body.addProperty("msgKey", "sampleText");
-        body.addProperty("msgParam", gson.toJson(msgParam));
-
-        // 如果有会话ID，添加到请求中
-        if (conversationId != null && !conversationId.isEmpty()) {
-            body.addProperty("openConversationId", conversationId);
+    public void sendMessageViaWebhook(String webhookUrl, String text) throws IOException {
+        if (webhookUrl == null || webhookUrl.isEmpty()) {
+            throw new IOException("Webhook URL 为空");
         }
 
+        // 构建消息体 - 按照自定义机器人的格式
+        JsonObject textObj = new JsonObject();
+        textObj.addProperty("content", text);
+
+        JsonObject body = new JsonObject();
+        body.addProperty("msgtype", "text");
+        body.add("text", textObj);
+
         String requestJson = gson.toJson(body);
-        Log.d(TAG, "发送消息请求: " + requestJson);
+        Log.d(TAG, "通过 Webhook 发送消息: " + requestJson);
 
         Request request = new Request.Builder()
-                .url(url)
-                .header("x-acs-dingtalk-access-token", accessToken)
+                .url(webhookUrl)
                 .post(RequestBody.create(
                         MediaType.parse("application/json"),
                         requestJson
@@ -131,11 +126,29 @@ public class DingTalkApiClient {
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                Log.e(TAG, "发送消息失败，响应: " + responseBody);
-                throw new IOException("发送消息失败: " + response.code() + ", " + responseBody);
+                Log.e(TAG, "Webhook 发送消息失败，响应: " + responseBody);
+                throw new IOException("Webhook 发送消息失败: " + response.code() + ", " + responseBody);
             }
-            Log.d(TAG, "消息发送成功，响应: " + responseBody);
+            Log.d(TAG, "Webhook 消息发送成功，响应: " + responseBody);
         }
+    }
+
+    /**
+     * 发送文本消息到群聊
+     * 优先使用 Webhook 方式，如果没有 Webhook 则使用 API 方式
+     */
+    public void sendTextMessage(String conversationId, String text) throws IOException {
+        // 优先使用 Webhook 方式（不需要 userIds）
+        String webhookUrl = config.getWebhookUrl();
+        if (webhookUrl != null && !webhookUrl.isEmpty()) {
+            sendMessageViaWebhook(webhookUrl, text);
+            return;
+        }
+
+        // 如果没有 Webhook，使用 API 方式（需要 userIds）
+        // 注意：这种方式需要至少一个 userId，否则会失败
+        Log.w(TAG, "未配置 Webhook URL，无法发送文本消息（API 方式需要 userIds）");
+        throw new IOException("未配置 Webhook URL，无法发送文本消息");
     }
 
     /**
@@ -180,34 +193,55 @@ public class DingTalkApiClient {
 
     /**
      * 发送文件消息到群聊
+     * 注意：文件消息必须使用 API 方式，需要提供 userIds
      */
-    public void sendFileMessage(String conversationId, String mediaId, String fileName) throws IOException {
+    public void sendFileMessage(String conversationId, String mediaId, String fileName, String userId) throws IOException {
         String accessToken = getAccessToken();
         String url = BASE_URL + "/v1.0/robot/oToMessages/batchSend";
 
-        JsonObject msg = new JsonObject();
-        msg.addProperty("msgKey", "sampleFile");
-        msg.addProperty("msgParam", "{\"mediaId\":\"" + mediaId + "\",\"fileName\":\"" + fileName + "\"}");
+        // 构建消息参数
+        JsonObject msgParam = new JsonObject();
+        msgParam.addProperty("mediaId", mediaId);
+        msgParam.addProperty("fileName", fileName);
+
+        // 构建 userIds 数组 - 必须至少包含一个 userId
+        com.google.gson.JsonArray userIds = new com.google.gson.JsonArray();
+        if (userId != null && !userId.isEmpty()) {
+            userIds.add(userId);
+        } else {
+            throw new IOException("发送文件消息需要提供 userId");
+        }
 
         JsonObject body = new JsonObject();
         body.addProperty("robotCode", config.getClientId());
-        body.addProperty("conversationId", conversationId);
-        body.add("msgParam", msg);
+        body.add("userIds", userIds);
+        body.addProperty("msgKey", "sampleFile");
+        body.addProperty("msgParam", gson.toJson(msgParam));
+
+        // 如果有会话ID，添加到请求中
+        if (conversationId != null && !conversationId.isEmpty()) {
+            body.addProperty("openConversationId", conversationId);
+        }
+
+        String requestJson = gson.toJson(body);
+        Log.d(TAG, "发送文件消息请求: " + requestJson);
 
         Request request = new Request.Builder()
                 .url(url)
                 .header("x-acs-dingtalk-access-token", accessToken)
                 .post(RequestBody.create(
                         MediaType.parse("application/json"),
-                        gson.toJson(body)
+                        requestJson
                 ))
                 .build();
 
         try (Response response = httpClient.newCall(request).execute()) {
+            String responseBody = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                throw new IOException("发送文件消息失败: " + response.code());
+                Log.e(TAG, "发送文件消息失败，响应: " + responseBody);
+                throw new IOException("发送文件消息失败: " + response.code() + ", " + responseBody);
             }
-            Log.d(TAG, "文件消息发送成功");
+            Log.d(TAG, "文件消息发送成功，响应: " + responseBody);
         }
     }
 

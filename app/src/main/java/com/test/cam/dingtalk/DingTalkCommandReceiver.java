@@ -18,7 +18,7 @@ public class DingTalkCommandReceiver implements DingTalkStreamClient.MessageCall
     private final Handler mainHandler;
 
     public interface CommandListener {
-        void onRecordCommand(String conversationId);
+        void onRecordCommand(String conversationId, String userId);
         void onConnectionStatusChanged(boolean connected);
     }
 
@@ -54,8 +54,8 @@ public class DingTalkCommandReceiver implements DingTalkStreamClient.MessageCall
             // 发送确认消息
             sendResponse(conversationId, "收到录制指令，开始录制 1 分钟视频...");
 
-            // 通知监听器执行录制
-            mainHandler.post(() -> listener.onRecordCommand(conversationId));
+            // 通知监听器执行录制，传递 senderUserId
+            mainHandler.post(() -> listener.onRecordCommand(conversationId, senderUserId));
         } else {
             Log.d(TAG, "未识别的指令: " + command);
             sendResponse(conversationId, "未识别的指令。请发送「录制」开始录制视频。");

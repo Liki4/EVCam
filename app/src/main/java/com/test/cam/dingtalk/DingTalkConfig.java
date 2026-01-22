@@ -12,6 +12,7 @@ public class DingTalkConfig {
     private static final String KEY_CLIENT_SECRET = "client_secret";
     private static final String KEY_ACCESS_TOKEN = "access_token";
     private static final String KEY_TOKEN_EXPIRE_TIME = "token_expire_time";
+    private static final String KEY_WEBHOOK_URL = "webhook_url";
 
     private final SharedPreferences prefs;
 
@@ -56,5 +57,15 @@ public class DingTalkConfig {
 
     public void clearConfig() {
         prefs.edit().clear().apply();
+    }
+
+    public void saveWebhookUrl(String webhookUrl) {
+        prefs.edit()
+                .putString(KEY_WEBHOOK_URL, webhookUrl)
+                .apply();
+    }
+
+    public String getWebhookUrl() {
+        return prefs.getString(KEY_WEBHOOK_URL, "");
     }
 }

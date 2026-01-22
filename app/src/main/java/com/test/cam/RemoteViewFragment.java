@@ -106,7 +106,15 @@ public class RemoteViewFragment extends Fragment {
         DingTalkStreamManager.ConnectionCallback connectionCallback = new DingTalkStreamManager.ConnectionCallback() {
             @Override
             public void onConnected() {
+                // 检查 Fragment 是否还附加到 Activity
+                if (!isAdded() || getActivity() == null) {
+                    return;
+                }
                 requireActivity().runOnUiThread(() -> {
+                    // 再次检查，因为可能在线程切换时 Fragment 被销毁
+                    if (!isAdded() || getView() == null) {
+                        return;
+                    }
                     tvConnectionStatus.setText("已连接");
                     tvConnectionStatus.setTextColor(0xFF66FF66);
                     btnStartService.setEnabled(false);
@@ -117,7 +125,15 @@ public class RemoteViewFragment extends Fragment {
 
             @Override
             public void onDisconnected() {
+                // 检查 Fragment 是否还附加到 Activity
+                if (!isAdded() || getActivity() == null) {
+                    return;
+                }
                 requireActivity().runOnUiThread(() -> {
+                    // 再次检查，因为可能在线程切换时 Fragment 被销毁
+                    if (!isAdded() || getView() == null) {
+                        return;
+                    }
                     tvConnectionStatus.setText("未连接");
                     tvConnectionStatus.setTextColor(0xFFFF6666);
                     btnStartService.setEnabled(true);
@@ -127,7 +143,15 @@ public class RemoteViewFragment extends Fragment {
 
             @Override
             public void onError(String error) {
+                // 检查 Fragment 是否还附加到 Activity
+                if (!isAdded() || getActivity() == null) {
+                    return;
+                }
                 requireActivity().runOnUiThread(() -> {
+                    // 再次检查，因为可能在线程切换时 Fragment 被销毁
+                    if (!isAdded() || getView() == null) {
+                        return;
+                    }
                     tvConnectionStatus.setText("连接失败");
                     tvConnectionStatus.setTextColor(0xFFFF6666);
                     Toast.makeText(requireContext(), "连接失败: " + error, Toast.LENGTH_LONG).show();
@@ -138,9 +162,9 @@ public class RemoteViewFragment extends Fragment {
         };
 
         // 创建指令回调
-        DingTalkStreamManager.CommandCallback commandCallback = conversationId -> {
+        DingTalkStreamManager.CommandCallback commandCallback = (conversationId, userId) -> {
             if (getActivity() instanceof MainActivity) {
-                ((MainActivity) getActivity()).startRemoteRecording(conversationId);
+                ((MainActivity) getActivity()).startRemoteRecording(conversationId, userId);
             }
         };
 
@@ -166,7 +190,19 @@ public class RemoteViewFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        stopService();
+        // 不要在这里停止服务，让用户手动停止
+        // 或者将 streamManager 移到 Activity 级别
+        // stopService();
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        // 只在 Fragment 真正销毁时停止服务
+        if (streamManager != null && streamManager.isRunning()) {
+            streamManager.stop();
+            streamManager = null;
+        }
     }
 
     public DingTalkApiClient getApiClient() {

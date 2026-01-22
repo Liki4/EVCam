@@ -84,6 +84,7 @@ public class MainActivity extends AppCompatActivity {
 
     // 远程录制相关
     private String remoteConversationId;  // 钉钉会话 ID
+    private String remoteUserId;  // 钉钉用户 ID
     private android.os.Handler autoStopHandler;  // 自动停止录制的 Handler
     private Runnable autoStopRunnable;  // 自动停止录制的 Runnable
 
@@ -626,8 +627,9 @@ public class MainActivity extends AppCompatActivity {
      * 远程录制（由钉钉指令触发）
      * 自动录制 1 分钟视频并上传到钉钉
      */
-    public void startRemoteRecording(String conversationId) {
+    public void startRemoteRecording(String conversationId, String userId) {
         this.remoteConversationId = conversationId;
+        this.remoteUserId = userId;
 
         appendLog("收到远程录制指令，开始录制 1 分钟视频...");
 
@@ -720,7 +722,7 @@ public class MainActivity extends AppCompatActivity {
 
             if (apiClient != null && remoteConversationId != null) {
                 VideoUploadService uploadService = new VideoUploadService(this, apiClient);
-                uploadService.uploadVideos(recentFiles, remoteConversationId, new VideoUploadService.UploadCallback() {
+                uploadService.uploadVideos(recentFiles, remoteConversationId, remoteUserId, new VideoUploadService.UploadCallback() {
                     @Override
                     public void onProgress(String message) {
                         appendLog(message);
