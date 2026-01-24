@@ -1,5 +1,7 @@
 package com.kooo.evcam.camera;
 
+
+import com.kooo.evcam.AppLog;
 import android.media.MediaRecorder;
 import android.util.Log;
 import android.view.Surface;
@@ -101,7 +103,7 @@ public class VideoRecorder {
      */
     public boolean prepareRecording(String filePath, int width, int height) {
         if (isRecording) {
-            Log.w(TAG, "Camera " + cameraId + " is already recording");
+            AppLog.w(TAG, "Camera " + cameraId + " is already recording");
             return false;
         }
 
@@ -130,10 +132,10 @@ public class VideoRecorder {
             // 使用传入的文件路径作为第一段
             prepareMediaRecorder(filePath, width, height);
             currentFilePath = filePath;
-            Log.d(TAG, "Camera " + cameraId + " prepared recording to: " + filePath);
+            AppLog.d(TAG, "Camera " + cameraId + " prepared recording to: " + filePath);
             return true;
         } catch (IOException e) {
-            Log.e(TAG, "Failed to prepare recording for camera " + cameraId, e);
+            AppLog.e(TAG, "Failed to prepare recording for camera " + cameraId, e);
             releaseMediaRecorder();
             // 确保状态被重置
             isRecording = false;
@@ -161,19 +163,19 @@ public class VideoRecorder {
      */
     public boolean startRecording() {
         if (mediaRecorder == null) {
-            Log.e(TAG, "Camera " + cameraId + " MediaRecorder not prepared");
+            AppLog.e(TAG, "Camera " + cameraId + " MediaRecorder not prepared");
             return false;
         }
 
         if (isRecording) {
-            Log.w(TAG, "Camera " + cameraId + " is already recording");
+            AppLog.w(TAG, "Camera " + cameraId + " is already recording");
             return false;
         }
 
         try {
             mediaRecorder.start();
             isRecording = true;
-            Log.d(TAG, "Camera " + cameraId + " started recording segment " + segmentIndex);
+            AppLog.d(TAG, "Camera " + cameraId + " started recording segment " + segmentIndex);
             if (callback != null && segmentIndex == 0) {
                 // 只在第一段时通知开始录制
                 callback.onRecordStart(cameraId);
@@ -184,7 +186,7 @@ public class VideoRecorder {
 
             return true;
         } catch (RuntimeException e) {
-            Log.e(TAG, "Failed to start recording for camera " + cameraId, e);
+            AppLog.e(TAG, "Failed to start recording for camera " + cameraId, e);
             releaseMediaRecorder();
             if (callback != null) {
                 callback.onRecordError(cameraId, e.getMessage());
@@ -205,14 +207,14 @@ public class VideoRecorder {
         // 创建新的分段任务
         segmentRunnable = () -> {
             if (isRecording) {
-                Log.d(TAG, "Camera " + cameraId + " switching to next segment");
+                AppLog.d(TAG, "Camera " + cameraId + " switching to next segment");
                 switchToNextSegment();
             }
         };
 
         // 延迟执行（1分钟后）
         segmentHandler.postDelayed(segmentRunnable, SEGMENT_DURATION_MS);
-        Log.d(TAG, "Camera " + cameraId + " scheduled next segment in " + (SEGMENT_DURATION_MS / 1000) + " seconds");
+        AppLog.d(TAG, "Camera " + cameraId + " scheduled next segment in " + (SEGMENT_DURATION_MS / 1000) + " seconds");
     }
 
     /**
@@ -226,12 +228,12 @@ public class VideoRecorder {
                 try {
                     mediaRecorder.stop();
                     isRecording = false;  // 立即更新状态
-                    Log.d(TAG, "Camera " + cameraId + " stopped segment " + segmentIndex + ": " + currentFilePath);
+                    AppLog.d(TAG, "Camera " + cameraId + " stopped segment " + segmentIndex + ": " + currentFilePath);
 
                     // 验证并清理损坏的文件
                     validateAndCleanupFile(currentFilePath);
                 } catch (RuntimeException e) {
-                    Log.e(TAG, "Error stopping segment for camera " + cameraId, e);
+                    AppLog.e(TAG, "Error stopping segment for camera " + cameraId, e);
                     isRecording = false;  // 即使失败也更新状态
 
                     // 停止失败，删除损坏的文件
@@ -239,7 +241,7 @@ public class VideoRecorder {
                         File file = new File(currentFilePath);
                         if (file.exists()) {
                             file.delete();
-                            Log.w(TAG, "Deleted corrupted segment file: " + currentFilePath);
+                            AppLog.w(TAG, "Deleted corrupted segment file: " + currentFilePath);
                         }
                     }
                 }
@@ -263,10 +265,10 @@ public class VideoRecorder {
 
             // 注意：不在这里调用 start()，而是等待外部重新配置相机会话后调用 startRecording()
             // 这样可以确保新的 Surface 已经添加到 CaptureSession 中
-            Log.d(TAG, "Camera " + cameraId + " prepared segment " + segmentIndex + ": " + nextSegmentPath + ", waiting for session reconfiguration");
+            AppLog.d(TAG, "Camera " + cameraId + " prepared segment " + segmentIndex + ": " + nextSegmentPath + ", waiting for session reconfiguration");
 
         } catch (Exception e) {
-            Log.e(TAG, "Failed to switch segment for camera " + cameraId, e);
+            AppLog.e(TAG, "Failed to switch segment for camera " + cameraId, e);
             isRecording = false;
             waitingForSessionReconfiguration = false;
             if (callback != null) {
@@ -297,7 +299,7 @@ public class VideoRecorder {
 
         // 如果正在等待会话重新配置，说明MediaRecorder已经stop过了，只需要清理状态
         if (waitingForSessionReconfiguration) {
-            Log.d(TAG, "Camera " + cameraId + " is waiting for session reconfiguration, skipping stop");
+            AppLog.d(TAG, "Camera " + cameraId + " is waiting for session reconfiguration, skipping stop");
             isRecording = false;
             waitingForSessionReconfiguration = false;
             releaseMediaRecorder();
@@ -314,14 +316,14 @@ public class VideoRecorder {
         }
 
         if (!isRecording) {
-            Log.w(TAG, "Camera " + cameraId + " is not recording");
+            AppLog.w(TAG, "Camera " + cameraId + " is not recording");
             return;
         }
 
         try {
             if (mediaRecorder != null) {
                 mediaRecorder.stop();
-                Log.d(TAG, "Camera " + cameraId + " stopped recording: " + currentFilePath + " (total segments: " + (segmentIndex + 1) + ")");
+                AppLog.d(TAG, "Camera " + cameraId + " stopped recording: " + currentFilePath + " (total segments: " + (segmentIndex + 1) + ")");
             }
             isRecording = false;
 
@@ -332,7 +334,7 @@ public class VideoRecorder {
                 callback.onRecordStop(cameraId);
             }
         } catch (RuntimeException e) {
-            Log.e(TAG, "Failed to stop recording for camera " + cameraId, e);
+            AppLog.e(TAG, "Failed to stop recording for camera " + cameraId, e);
             isRecording = false;
 
             // 录制失败，删除损坏的文件
@@ -340,7 +342,7 @@ public class VideoRecorder {
                 File file = new File(currentFilePath);
                 if (file.exists()) {
                     file.delete();
-                    Log.w(TAG, "Deleted corrupted video file: " + currentFilePath);
+                    AppLog.w(TAG, "Deleted corrupted video file: " + currentFilePath);
                 }
             }
         } finally {
@@ -368,10 +370,10 @@ public class VideoRecorder {
         long fileSize = file.length();
 
         if (fileSize < MIN_VALID_SIZE) {
-            Log.w(TAG, "Video file too small: " + filePath + " (size: " + fileSize + " bytes, minimum: " + MIN_VALID_SIZE + " bytes). Deleting...");
+            AppLog.w(TAG, "Video file too small: " + filePath + " (size: " + fileSize + " bytes, minimum: " + MIN_VALID_SIZE + " bytes). Deleting...");
             file.delete();
         } else {
-            Log.d(TAG, "Video file validated: " + filePath + " (size: " + (fileSize / 1024) + " KB)");
+            AppLog.d(TAG, "Video file validated: " + filePath + " (size: " + (fileSize / 1024) + " KB)");
         }
     }
 

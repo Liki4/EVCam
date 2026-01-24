@@ -1,5 +1,7 @@
 package com.kooo.evcam.dingtalk;
 
+
+import com.kooo.evcam.AppLog;
 import android.content.Context;
 import android.util.Log;
 
@@ -52,7 +54,7 @@ public class VideoUploadService {
                     File videoFile = videoFiles.get(i);
 
                     if (!videoFile.exists()) {
-                        Log.w(TAG, "视频文件不存在: " + videoFile.getPath());
+                        AppLog.w(TAG, "视频文件不存在: " + videoFile.getPath());
                         continue;
                     }
 
@@ -65,7 +67,7 @@ public class VideoUploadService {
 
                         boolean thumbnailExtracted = VideoThumbnailExtractor.extractThumbnail(videoFile, thumbnailFile);
                         if (!thumbnailExtracted) {
-                            Log.w(TAG, "封面提取失败，跳过视频: " + videoFile.getName());
+                            AppLog.w(TAG, "封面提取失败，跳过视频: " + videoFile.getName());
                             callback.onError("封面提取失败: " + videoFile.getName());
                             continue;
                         }
@@ -89,7 +91,7 @@ public class VideoUploadService {
                         apiClient.sendVideoMessage(conversationId, conversationType, videoMediaId, picMediaId, duration, userId);
 
                         uploadedFiles.add(videoFile.getName());
-                        Log.d(TAG, "视频上传成功: " + videoFile.getName());
+                        AppLog.d(TAG, "视频上传成功: " + videoFile.getName());
 
                         // 6. 清理临时封面文件
                         if (thumbnailFile.exists()) {
@@ -97,7 +99,7 @@ public class VideoUploadService {
                         }
 
                     } catch (Exception e) {
-                        Log.e(TAG, "上传视频失败: " + videoFile.getName(), e);
+                        AppLog.e(TAG, "上传视频失败: " + videoFile.getName(), e);
                         callback.onError("上传失败: " + videoFile.getName() + " - " + e.getMessage());
                     }
                 }
@@ -113,7 +115,7 @@ public class VideoUploadService {
                 }
 
             } catch (Exception e) {
-                Log.e(TAG, "上传过程出错", e);
+                AppLog.e(TAG, "上传过程出错", e);
                 callback.onError("上传过程出错: " + e.getMessage());
             }
         }).start();

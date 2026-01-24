@@ -1,5 +1,7 @@
 package com.kooo.evcam.dingtalk;
 
+
+import com.kooo.evcam.AppLog;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -42,9 +44,9 @@ public class DingTalkBotMessageListener implements OpenDingTalkCallbackListener<
                 String senderId = message.getSenderId();
                 String conversationId = message.getConversationId();
 
-                Log.d(TAG, "收到机器人消息 - senderId: " + senderId);
-                Log.d(TAG, "收到机器人消息 - conversationId: " + conversationId);
-                Log.d(TAG, "收到机器人消息 - text: " + msg);
+                AppLog.d(TAG, "收到机器人消息 - senderId: " + senderId);
+                AppLog.d(TAG, "收到机器人消息 - conversationId: " + conversationId);
+                AppLog.d(TAG, "收到机器人消息 - text: " + msg);
 
                 // 解析指令
                 String command = parseCommand(msg);
@@ -53,7 +55,7 @@ public class DingTalkBotMessageListener implements OpenDingTalkCallbackListener<
                 int durationSeconds = parseRecordDuration(command);
 
                 if (command.startsWith("录制") || command.toLowerCase().startsWith("record")) {
-                    Log.d(TAG, "收到录制指令，时长: " + durationSeconds + " 秒");
+                    AppLog.d(TAG, "收到录制指令，时长: " + durationSeconds + " 秒");
 
                     // 发送确认消息，传递 senderId
                     String confirmMsg = String.format("收到录制指令，开始录制 %d 秒视频...", durationSeconds);
@@ -62,12 +64,12 @@ public class DingTalkBotMessageListener implements OpenDingTalkCallbackListener<
                     // 通知监听器执行录制，传递 senderId 和时长
                     mainHandler.post(() -> callback.onRecordCommand(conversationId, senderId, durationSeconds));
                 } else {
-                    Log.d(TAG, "未识别的指令: " + command);
+                    AppLog.d(TAG, "未识别的指令: " + command);
                     sendResponse(conversationId, senderId, "未识别的指令。请发送「录制」或「录制+数字」开始录制视频（如：录制30 表示录制30秒，默认60秒）。");
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "处理机器人消息失败", e);
+            AppLog.e(TAG, "处理机器人消息失败", e);
         }
 
         return new JSONObject();
@@ -114,7 +116,7 @@ public class DingTalkBotMessageListener implements OpenDingTalkCallbackListener<
             }
             return duration;
         } catch (NumberFormatException e) {
-            Log.w(TAG, "无法解析录制时长: " + durationStr + "，使用默认值 60 秒");
+            AppLog.w(TAG, "无法解析录制时长: " + durationStr + "，使用默认值 60 秒");
             return 60;
         }
     }
@@ -126,9 +128,9 @@ public class DingTalkBotMessageListener implements OpenDingTalkCallbackListener<
         new Thread(() -> {
             try {
                 apiClient.sendTextMessage(conversationId, message, userId);
-                Log.d(TAG, "响应消息已发送: " + message);
+                AppLog.d(TAG, "响应消息已发送: " + message);
             } catch (Exception e) {
-                Log.e(TAG, "发送响应消息失败", e);
+                AppLog.e(TAG, "发送响应消息失败", e);
             }
         }).start();
     }

@@ -1,5 +1,7 @@
 package com.kooo.evcam.dingtalk;
 
+
+import com.kooo.evcam.AppLog;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -31,19 +33,19 @@ public class DingTalkCommandReceiver implements DingTalkStreamClient.MessageCall
 
     @Override
     public void onConnected() {
-        Log.d(TAG, "Stream 连接已建立");
+        AppLog.d(TAG, "Stream 连接已建立");
         mainHandler.post(() -> listener.onConnectionStatusChanged(true));
     }
 
     @Override
     public void onDisconnected() {
-        Log.d(TAG, "Stream 连接已断开");
+        AppLog.d(TAG, "Stream 连接已断开");
         mainHandler.post(() -> listener.onConnectionStatusChanged(false));
     }
 
     @Override
     public void onMessageReceived(String conversationId, String conversationType, String senderUserId, String text) {
-        Log.d(TAG, "收到消息: " + text + " from " + senderUserId + " (type: " + conversationType + ")");
+        AppLog.d(TAG, "收到消息: " + text + " from " + senderUserId + " (type: " + conversationType + ")");
 
         // 解析指令
         String command = parseCommand(text);
@@ -52,7 +54,7 @@ public class DingTalkCommandReceiver implements DingTalkStreamClient.MessageCall
         int durationSeconds = parseRecordDuration(command);
 
         if (command.startsWith("录制") || command.toLowerCase().startsWith("record")) {
-            Log.d(TAG, "收到录制指令，时长: " + durationSeconds + " 秒");
+            AppLog.d(TAG, "收到录制指令，时长: " + durationSeconds + " 秒");
 
             // 发送确认消息，传递 conversationType 和 senderUserId
             String confirmMsg = String.format("收到录制指令，开始录制 %d 秒视频...", durationSeconds);
@@ -61,14 +63,14 @@ public class DingTalkCommandReceiver implements DingTalkStreamClient.MessageCall
             // 通知监听器执行录制，传递 conversationType、senderUserId 和时长
             mainHandler.post(() -> listener.onRecordCommand(conversationId, conversationType, senderUserId, durationSeconds));
         } else {
-            Log.d(TAG, "未识别的指令: " + command);
+            AppLog.d(TAG, "未识别的指令: " + command);
             sendResponse(conversationId, conversationType, senderUserId, "未识别的指令。请发送「录制」或「录制+数字」开始录制视频（如：录制30 表示录制30秒，默认60秒）。");
         }
     }
 
     @Override
     public void onError(String error) {
-        Log.e(TAG, "错误: " + error);
+        AppLog.e(TAG, "错误: " + error);
     }
 
     /**
@@ -112,7 +114,7 @@ public class DingTalkCommandReceiver implements DingTalkStreamClient.MessageCall
             }
             return duration;
         } catch (NumberFormatException e) {
-            Log.w(TAG, "无法解析录制时长: " + durationStr + "，使用默认值 60 秒");
+            AppLog.w(TAG, "无法解析录制时长: " + durationStr + "，使用默认值 60 秒");
             return 60;
         }
     }
@@ -124,9 +126,9 @@ public class DingTalkCommandReceiver implements DingTalkStreamClient.MessageCall
         new Thread(() -> {
             try {
                 apiClient.sendTextMessage(conversationId, conversationType, message, userId);
-                Log.d(TAG, "响应消息已发送: " + message);
+                AppLog.d(TAG, "响应消息已发送: " + message);
             } catch (Exception e) {
-                Log.e(TAG, "发送响应消息失败", e);
+                AppLog.e(TAG, "发送响应消息失败", e);
             }
         }).start();
     }

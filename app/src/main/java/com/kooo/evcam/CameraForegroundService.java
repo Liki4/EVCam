@@ -1,5 +1,7 @@
 package com.kooo.evcam;
 
+
+import com.kooo.evcam.AppLog;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -24,13 +26,13 @@ public class CameraForegroundService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.d(TAG, "Service created");
+        AppLog.d(TAG, "Service created");
         createNotificationChannel();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.d(TAG, "Service started");
+        AppLog.d(TAG, "Service started");
 
         // 创建通知
         Notification notification = createNotification("摄像头服务运行中", "正在处理远程拍照/录制请求");
@@ -44,7 +46,7 @@ public class CameraForegroundService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Log.d(TAG, "Service destroyed");
+        AppLog.d(TAG, "Service destroyed");
     }
 
     @Override

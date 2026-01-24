@@ -1,5 +1,7 @@
 package com.kooo.evcam.dingtalk;
 
+
+import com.kooo.evcam.AppLog;
 import android.content.Context;
 import android.util.Log;
 
@@ -52,7 +54,7 @@ public class PhotoUploadService {
                     File photoFile = photoFiles.get(i);
 
                     if (!photoFile.exists()) {
-                        Log.w(TAG, "图片文件不存在: " + photoFile.getPath());
+                        AppLog.w(TAG, "图片文件不存在: " + photoFile.getPath());
                         continue;
                     }
 
@@ -62,25 +64,25 @@ public class PhotoUploadService {
                         // 1. 上传图片到钉钉（使用 image 类型）
                         callback.onProgress("正在上传图片 (" + (i + 1) + "/" + photoFiles.size() + ")...");
                         String mediaId = apiClient.uploadImage(photoFile);
-                        Log.d(TAG, "图片上传成功，mediaId: " + mediaId);
+                        AppLog.d(TAG, "图片上传成功，mediaId: " + mediaId);
 
                         // 2. 尝试使用 mediaId 发送图片消息
                         callback.onProgress("正在发送图片消息 (" + (i + 1) + "/" + photoFiles.size() + ")...");
                         try {
                             // 尝试直接使用 mediaId 作为 photoURL (可能钉钉会自动处理)
                             apiClient.sendImageMessage(conversationId, conversationType, mediaId, userId);
-                            Log.d(TAG, "图片消息发送成功: " + photoFile.getName());
+                            AppLog.d(TAG, "图片消息发送成功: " + photoFile.getName());
                         } catch (Exception imageError) {
                             // 如果图片消息失败,降级为文件消息
-                            Log.w(TAG, "图片消息发送失败,降级为文件消息: " + imageError.getMessage());
+                            AppLog.w(TAG, "图片消息发送失败,降级为文件消息: " + imageError.getMessage());
                             apiClient.sendFileMessage(conversationId, conversationType, mediaId, photoFile.getName(), userId);
-                            Log.d(TAG, "文件消息发送成功: " + photoFile.getName());
+                            AppLog.d(TAG, "文件消息发送成功: " + photoFile.getName());
                         }
 
                         uploadedFiles.add(photoFile.getName());
 
                     } catch (Exception e) {
-                        Log.e(TAG, "上传图片失败: " + photoFile.getName(), e);
+                        AppLog.e(TAG, "上传图片失败: " + photoFile.getName(), e);
                         callback.onError("上传失败: " + photoFile.getName() + " - " + e.getMessage());
                     }
                 }
@@ -96,7 +98,7 @@ public class PhotoUploadService {
                 }
 
             } catch (Exception e) {
-                Log.e(TAG, "上传过程出错", e);
+                AppLog.e(TAG, "上传过程出错", e);
                 callback.onError("上传过程出错: " + e.getMessage());
             }
         }).start();

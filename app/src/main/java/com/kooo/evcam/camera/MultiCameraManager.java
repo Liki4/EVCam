@@ -1,5 +1,7 @@
 package com.kooo.evcam.camera;
 
+
+import com.kooo.evcam.AppLog;
 import android.content.Context;
 import android.os.Environment;
 import android.util.Log;
@@ -95,7 +97,7 @@ public class MultiCameraManager {
         CameraCallback callback = new CameraCallback() {
             @Override
             public void onCameraOpened(String cameraId) {
-                Log.d(TAG, "Callback: Camera " + cameraId + " opened");
+                AppLog.d(TAG, "Callback: Camera " + cameraId + " opened");
                 if (statusCallback != null) {
                     statusCallback.onCameraStatusUpdate(cameraId, "已打开");
                 }
@@ -103,7 +105,7 @@ public class MultiCameraManager {
 
             @Override
             public void onCameraConfigured(String cameraId) {
-                Log.d(TAG, "Callback: Camera " + cameraId + " configured");
+                AppLog.d(TAG, "Callback: Camera " + cameraId + " configured");
                 if (statusCallback != null) {
                     statusCallback.onCameraStatusUpdate(cameraId, "预览已启动");
                 }
@@ -115,7 +117,7 @@ public class MultiCameraManager {
                         VideoRecorder recorder = recorders.get(key);
 
                         if (recorder != null && recorder.isWaitingForSessionReconfiguration()) {
-                            Log.d(TAG, "Camera " + cameraId + " session reconfigured, starting next segment recording");
+                            AppLog.d(TAG, "Camera " + cameraId + " session reconfigured, starting next segment recording");
                             recorder.clearWaitingForSessionReconfiguration();
                             recorder.startRecording();
                         }
@@ -126,12 +128,12 @@ public class MultiCameraManager {
                 // 检查是否所有会话都已配置完成
                 if (expectedSessionCount > 0) {
                     sessionConfiguredCount++;
-                    Log.d(TAG, "Session configured: " + sessionConfiguredCount + "/" + expectedSessionCount);
+                    AppLog.d(TAG, "Session configured: " + sessionConfiguredCount + "/" + expectedSessionCount);
 
                     if (sessionConfiguredCount >= expectedSessionCount) {
                         // 所有会话都已配置完成，执行待处理的录制启动
                         if (pendingRecordingStart != null) {
-                            Log.d(TAG, "All sessions configured, starting recording...");
+                            AppLog.d(TAG, "All sessions configured, starting recording...");
                             // 取消超时任务
                             if (sessionTimeoutRunnable != null) {
                                 mainHandler.removeCallbacks(sessionTimeoutRunnable);
@@ -148,7 +150,7 @@ public class MultiCameraManager {
 
             @Override
             public void onCameraClosed(String cameraId) {
-                Log.d(TAG, "Callback: Camera " + cameraId + " closed");
+                AppLog.d(TAG, "Callback: Camera " + cameraId + " closed");
                 if (statusCallback != null) {
                     statusCallback.onCameraStatusUpdate(cameraId, "已关闭");
                 }
@@ -157,7 +159,7 @@ public class MultiCameraManager {
             @Override
             public void onCameraError(String cameraId, int errorCode) {
                 String errorMsg = getErrorMessage(errorCode);
-                Log.e(TAG, "Callback: Camera " + cameraId + " error: " + errorCode + " - " + errorMsg);
+                AppLog.e(TAG, "Callback: Camera " + cameraId + " error: " + errorCode + " - " + errorMsg);
                 if (statusCallback != null) {
                     statusCallback.onCameraStatusUpdate(cameraId, "错误: " + errorMsg);
                 }
@@ -165,12 +167,12 @@ public class MultiCameraManager {
                 // 如果在等待会话配置期间发生错误，减少期望计数
                 if (expectedSessionCount > 0 && errorCode == -3) {
                     expectedSessionCount--;
-                    Log.d(TAG, "Session configuration failed, adjusted expected count: " + sessionConfiguredCount + "/" + expectedSessionCount);
+                    AppLog.d(TAG, "Session configuration failed, adjusted expected count: " + sessionConfiguredCount + "/" + expectedSessionCount);
 
                     // 检查是否所有剩余会话都已配置完成
                     if (sessionConfiguredCount >= expectedSessionCount && expectedSessionCount > 0) {
                         if (pendingRecordingStart != null) {
-                            Log.d(TAG, "Remaining sessions configured, starting recording...");
+                            AppLog.d(TAG, "Remaining sessions configured, starting recording...");
                             // 取消超时任务
                             if (sessionTimeoutRunnable != null) {
                                 mainHandler.removeCallbacks(sessionTimeoutRunnable);
@@ -183,7 +185,7 @@ public class MultiCameraManager {
                         expectedSessionCount = 0;
                     } else if (expectedSessionCount == 0) {
                         // 所有会话都失败了
-                        Log.e(TAG, "All sessions failed to configure");
+                        AppLog.e(TAG, "All sessions failed to configure");
                         if (sessionTimeoutRunnable != null) {
                             mainHandler.removeCallbacks(sessionTimeoutRunnable);
                             sessionTimeoutRunnable = null;
@@ -197,7 +199,7 @@ public class MultiCameraManager {
 
             @Override
             public void onPreviewSizeChosen(String cameraId, Size previewSize) {
-                Log.d(TAG, "Callback: Camera " + cameraId + " preview size: " + previewSize);
+                AppLog.d(TAG, "Callback: Camera " + cameraId + " preview size: " + previewSize);
                 // 找到对应的 camera key
                 for (Map.Entry<String, SingleCamera> entry : cameras.entrySet()) {
                     if (entry.getValue().getCameraId().equals(cameraId)) {
@@ -224,22 +226,22 @@ public class MultiCameraManager {
         RecordCallback recordCallback = new RecordCallback() {
             @Override
             public void onRecordStart(String cameraId) {
-                Log.d(TAG, "Recording started for camera " + cameraId);
+                AppLog.d(TAG, "Recording started for camera " + cameraId);
             }
 
             @Override
             public void onRecordStop(String cameraId) {
-                Log.d(TAG, "Recording stopped for camera " + cameraId);
+                AppLog.d(TAG, "Recording stopped for camera " + cameraId);
             }
 
             @Override
             public void onRecordError(String cameraId, String error) {
-                Log.e(TAG, "Recording error for camera " + cameraId + ": " + error);
+                AppLog.e(TAG, "Recording error for camera " + cameraId + ": " + error);
             }
 
             @Override
             public void onSegmentSwitch(String cameraId, int newSegmentIndex) {
-                Log.d(TAG, "Segment switch for camera " + cameraId + " to segment " + newSegmentIndex);
+                AppLog.d(TAG, "Segment switch for camera " + cameraId + " to segment " + newSegmentIndex);
                 // 找到对应的 camera key 和 camera
                 for (Map.Entry<String, SingleCamera> entry : cameras.entrySet()) {
                     if (entry.getValue().getCameraId().equals(cameraId)) {
@@ -251,7 +253,7 @@ public class MultiCameraManager {
                             // 更新录制 Surface 并重新创建会话
                             camera.setRecordSurface(recorder.getSurface());
                             camera.recreateSession();
-                            Log.d(TAG, "Recreated session for camera " + cameraId + " after segment switch");
+                            AppLog.d(TAG, "Recreated session for camera " + cameraId + " after segment switch");
                         }
                         break;
                     }
@@ -264,7 +266,7 @@ public class MultiCameraManager {
         recorders.get("left").setCallback(recordCallback);
         recorders.get("right").setCallback(recordCallback);
 
-        Log.d(TAG, "Cameras initialized");
+        AppLog.d(TAG, "Cameras initialized");
     }
 
     /**
@@ -299,7 +301,7 @@ public class MultiCameraManager {
      * 打开所有摄像头
      */
     public void openAllCameras() {
-        Log.d(TAG, "Opening all cameras...");
+        AppLog.d(TAG, "Opening all cameras...");
 
         activeCameraKeys.clear();
         int opened = 0;
@@ -318,7 +320,7 @@ public class MultiCameraManager {
             opened++;
         }
 
-        Log.d(TAG, "Requested open cameras: " + activeCameraKeys);
+        AppLog.d(TAG, "Requested open cameras: " + activeCameraKeys);
     }
 
     /**
@@ -328,7 +330,7 @@ public class MultiCameraManager {
         for (SingleCamera camera : cameras.values()) {
             camera.closeCamera();
         }
-        Log.d(TAG, "All cameras closed");
+        AppLog.d(TAG, "All cameras closed");
     }
 
     /**
@@ -336,7 +338,7 @@ public class MultiCameraManager {
      */
     public boolean startRecording() {
         if (isRecording) {
-            Log.w(TAG, "Already recording");
+            AppLog.w(TAG, "Already recording");
             return false;
         }
 
@@ -347,7 +349,7 @@ public class MultiCameraManager {
 
         List<String> keys = getActiveCameraKeys();
         if (keys.isEmpty()) {
-            Log.e(TAG, "No active cameras for recording");
+            AppLog.e(TAG, "No active cameras for recording");
             return false;
         }
 
@@ -369,7 +371,7 @@ public class MultiCameraManager {
         }
 
         if (!prepareSuccess) {
-            Log.e(TAG, "Failed to prepare recording");
+            AppLog.e(TAG, "Failed to prepare recording");
             // 清理已准备的录制器
             for (String key : keys) {
                 VideoRecorder recorder = recorders.get(key);
@@ -396,7 +398,7 @@ public class MultiCameraManager {
 
         // 第三步：设置待处理的录制启动任务，等待所有会话配置完成后执行
         pendingRecordingStart = () -> {
-            Log.d(TAG, "Attempting to start recording...");
+            AppLog.d(TAG, "Attempting to start recording...");
             boolean startSuccess = false;
             int successCount = 0;
 
@@ -412,9 +414,9 @@ public class MultiCameraManager {
 
             if (startSuccess) {
                 isRecording = true;
-                Log.d(TAG, successCount + " camera(s) started recording successfully");
+                AppLog.d(TAG, successCount + " camera(s) started recording successfully");
             } else {
-                Log.e(TAG, "Failed to start recording on all cameras");
+                AppLog.e(TAG, "Failed to start recording on all cameras");
                 isRecording = false;
                 // 清理所有录制器
                 for (String key : keys) {
@@ -428,7 +430,7 @@ public class MultiCameraManager {
 
         // 设置超时机制：如果 3 秒内没有所有会话配置完成，强制启动录制
         sessionTimeoutRunnable = () -> {
-            Log.w(TAG, "Session configuration timeout, starting recording with available cameras");
+            AppLog.w(TAG, "Session configuration timeout, starting recording with available cameras");
             if (pendingRecordingStart != null) {
                 pendingRecordingStart.run();
                 pendingRecordingStart = null;
@@ -445,11 +447,11 @@ public class MultiCameraManager {
      * 停止录制所有摄像头
      */
     public void stopRecording() {
-        Log.d(TAG, "stopRecording called, isRecording=" + isRecording);
+        AppLog.d(TAG, "stopRecording called, isRecording=" + isRecording);
 
         // 清理待处理的录制启动任务
         if (pendingRecordingStart != null) {
-            Log.d(TAG, "Cancelling pending recording start");
+            AppLog.d(TAG, "Cancelling pending recording start");
             pendingRecordingStart = null;
         }
 
@@ -464,7 +466,7 @@ public class MultiCameraManager {
         expectedSessionCount = 0;
 
         if (!isRecording) {
-            Log.w(TAG, "Not recording, but cleaning up anyway");
+            AppLog.w(TAG, "Not recording, but cleaning up anyway");
             // 即使不在录制状态，也尝试清理录制器
             List<String> keys = getActiveCameraKeys();
             for (String key : keys) {
@@ -493,7 +495,7 @@ public class MultiCameraManager {
         }
 
         isRecording = false;
-        Log.d(TAG, "All cameras stopped recording");
+        AppLog.d(TAG, "All cameras stopped recording");
     }
 
     /**
@@ -509,7 +511,7 @@ public class MultiCameraManager {
 
         cameras.clear();
         recorders.clear();
-        Log.d(TAG, "All resources released");
+        AppLog.d(TAG, "All resources released");
     }
 
     /**
@@ -525,11 +527,11 @@ public class MultiCameraManager {
     public void takePicture() {
         List<String> keys = getActiveCameraKeys();
         if (keys.isEmpty()) {
-            Log.e(TAG, "No active cameras for taking picture");
+            AppLog.e(TAG, "No active cameras for taking picture");
             return;
         }
 
-        Log.d(TAG, "Taking picture with " + keys.size() + " camera(s) sequentially");
+        AppLog.d(TAG, "Taking picture with " + keys.size() + " camera(s) sequentially");
 
         // 顺序拍照，每个摄像头间隔300ms，避免同时发起多个STILL_CAPTURE请求导致资源耗尽
         for (int i = 0; i < keys.size(); i++) {
@@ -539,10 +541,10 @@ public class MultiCameraManager {
             mainHandler.postDelayed(() -> {
                 SingleCamera camera = cameras.get(key);
                 if (camera != null && camera.isConnected()) {
-                    Log.d(TAG, "Taking picture with camera " + key);
+                    AppLog.d(TAG, "Taking picture with camera " + key);
                     camera.takePicture();
                 } else {
-                    Log.w(TAG, "Camera " + key + " not available for taking picture");
+                    AppLog.w(TAG, "Camera " + key + " not available for taking picture");
                 }
             }, delay);
         }

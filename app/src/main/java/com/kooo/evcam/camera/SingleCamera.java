@@ -1,5 +1,7 @@
 package com.kooo.evcam.camera;
 
+
+import com.kooo.evcam.AppLog;
 import android.content.Context;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
@@ -100,7 +102,7 @@ public class SingleCamera {
             matrix.setScale(-1f, 1f, centerX, centerY);
 
             textureView.setTransform(matrix);
-            Log.d(TAG, "Camera " + cameraId + " (back) applied mirror transform");
+            AppLog.d(TAG, "Camera " + cameraId + " (back) applied mirror transform");
         });
     }
 
@@ -113,7 +115,7 @@ public class SingleCamera {
      */
     public void setRecordSurface(Surface surface) {
         this.recordSurface = surface;
-        Log.d(TAG, "Record surface set for camera " + cameraId);
+        AppLog.d(TAG, "Record surface set for camera " + cameraId);
     }
 
     /**
@@ -121,7 +123,7 @@ public class SingleCamera {
      */
     public void clearRecordSurface() {
         this.recordSurface = null;
-        Log.d(TAG, "Record surface cleared for camera " + cameraId);
+        AppLog.d(TAG, "Record surface cleared for camera " + cameraId);
     }
 
     public Surface getSurface() {
@@ -131,7 +133,7 @@ public class SingleCamera {
                 // 缓存 Surface 以避免重复创建和资源泄漏
                 if (previewSurface == null) {
                     previewSurface = new Surface(surfaceTexture);
-                    Log.d(TAG, "Camera " + cameraId + " created new preview surface");
+                    AppLog.d(TAG, "Camera " + cameraId + " created new preview surface");
                 }
                 return previewSurface;
             }
@@ -150,7 +152,7 @@ public class SingleCamera {
         // 首先尝试找到精确匹配 1280x800
         for (Size size : sizes) {
             if (size.getWidth() == TARGET_WIDTH && size.getHeight() == TARGET_HEIGHT) {
-                Log.d(TAG, "Camera " + cameraId + " found exact 1280x800 match");
+                AppLog.d(TAG, "Camera " + cameraId + " found exact 1280x800 match");
                 return size;
             }
         }
@@ -174,7 +176,7 @@ public class SingleCamera {
         if (bestSize == null) {
             // 如果还是没找到，使用第一个可用分辨率
             bestSize = sizes[0];
-            Log.d(TAG, "Camera " + cameraId + " using first available size");
+            AppLog.d(TAG, "Camera " + cameraId + " using first available size");
         }
 
         return bestSize;
@@ -200,7 +202,7 @@ public class SingleCamera {
                 backgroundThread = null;
                 backgroundHandler = null;
             } catch (InterruptedException e) {
-                Log.e(TAG, "Error stopping background thread", e);
+                AppLog.e(TAG, "Error stopping background thread", e);
             }
         }
     }
@@ -210,7 +212,7 @@ public class SingleCamera {
      */
     public void openCamera() {
         try {
-            Log.d(TAG, "openCamera: Starting for camera " + cameraId);
+            AppLog.d(TAG, "openCamera: Starting for camera " + cameraId);
             shouldReconnect = true;  // 启用自动重连
             reconnectAttempts = 0;  // 重置重连计数
             startBackgroundThread();
@@ -224,50 +226,50 @@ public class SingleCamera {
                 if (sizes == null || sizes.length == 0) {
                     sizes = map.getOutputSizes(SurfaceTexture.class);
                     if (sizes != null && sizes.length > 0) {
-                        Log.w(TAG, "Camera " + cameraId + " no PRIVATE sizes, fallback to SurfaceTexture sizes");
+                        AppLog.w(TAG, "Camera " + cameraId + " no PRIVATE sizes, fallback to SurfaceTexture sizes");
                     }
                 }
                 if (sizes == null || sizes.length == 0) {
-                    Log.e(TAG, "Camera " + cameraId + " has no output sizes for PRIVATE/SurfaceTexture");
+                    AppLog.e(TAG, "Camera " + cameraId + " has no output sizes for PRIVATE/SurfaceTexture");
                     return;
                 }
 
                 // 打印所有可用分辨率
-                Log.d(TAG, "Camera " + cameraId + " available sizes:");
+                AppLog.d(TAG, "Camera " + cameraId + " available sizes:");
                 for (int i = 0; i < Math.min(sizes.length, 10); i++) {
-                    Log.d(TAG, "  [" + i + "] " + sizes[i].getWidth() + "x" + sizes[i].getHeight());
+                    AppLog.d(TAG, "  [" + i + "] " + sizes[i].getWidth() + "x" + sizes[i].getHeight());
                 }
 
                 // 选择合适的分辨率
                 previewSize = chooseOptimalSize(sizes);
-                Log.d(TAG, "Camera " + cameraId + " selected preview size: " + previewSize);
+                AppLog.d(TAG, "Camera " + cameraId + " selected preview size: " + previewSize);
 
                 // 不在这里初始化ImageReader，改为拍照时按需创建
                 // 这样可以避免占用额外的缓冲区，防止超过系统限制(4个buffer)
-                Log.d(TAG, "Camera " + cameraId + " ImageReader will be created on demand when taking picture");
+                AppLog.d(TAG, "Camera " + cameraId + " ImageReader will be created on demand when taking picture");
 
                 // 通知回调预览尺寸已确定
                 if (callback != null && previewSize != null) {
                     callback.onPreviewSizeChosen(cameraId, previewSize);
                 }
             } else {
-                Log.e(TAG, "Camera " + cameraId + " StreamConfigurationMap is null!");
+                AppLog.e(TAG, "Camera " + cameraId + " StreamConfigurationMap is null!");
             }
 
             // 检查 TextureView 状态
-            Log.d(TAG, "Camera " + cameraId + " TextureView available: " + textureView.isAvailable());
+            AppLog.d(TAG, "Camera " + cameraId + " TextureView available: " + textureView.isAvailable());
             if (textureView.getSurfaceTexture() != null) {
-                Log.d(TAG, "Camera " + cameraId + " SurfaceTexture exists");
+                AppLog.d(TAG, "Camera " + cameraId + " SurfaceTexture exists");
             } else {
-                Log.e(TAG, "Camera " + cameraId + " SurfaceTexture is NULL!");
+                AppLog.e(TAG, "Camera " + cameraId + " SurfaceTexture is NULL!");
             }
 
             // 打开摄像头
-            Log.d(TAG, "Camera " + cameraId + " calling openCamera...");
+            AppLog.d(TAG, "Camera " + cameraId + " calling openCamera...");
             cameraManager.openCamera(cameraId, stateCallback, backgroundHandler);
 
         } catch (CameraAccessException e) {
-            Log.e(TAG, "Failed to open camera " + cameraId, e);
+            AppLog.e(TAG, "Failed to open camera " + cameraId, e);
             if (callback != null) {
                 callback.onCameraError(cameraId, -1);
             }
@@ -276,7 +278,7 @@ public class SingleCamera {
                 scheduleReconnect();
             }
         } catch (SecurityException e) {
-            Log.e(TAG, "No camera permission", e);
+            AppLog.e(TAG, "No camera permission", e);
             if (callback != null) {
                 callback.onCameraError(cameraId, -2);
             }
@@ -288,13 +290,13 @@ public class SingleCamera {
      */
     private void scheduleReconnect() {
         if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            Log.e(TAG, "Camera " + cameraId + " max reconnect attempts reached (" + MAX_RECONNECT_ATTEMPTS + "), giving up");
+            AppLog.e(TAG, "Camera " + cameraId + " max reconnect attempts reached (" + MAX_RECONNECT_ATTEMPTS + "), giving up");
             shouldReconnect = false;
             return;
         }
 
         reconnectAttempts++;
-        Log.d(TAG, "Camera " + cameraId + " scheduling reconnect attempt " + reconnectAttempts + "/" + MAX_RECONNECT_ATTEMPTS + " in " + (RECONNECT_DELAY_MS / 1000) + " seconds");
+        AppLog.d(TAG, "Camera " + cameraId + " scheduling reconnect attempt " + reconnectAttempts + "/" + MAX_RECONNECT_ATTEMPTS + " in " + (RECONNECT_DELAY_MS / 1000) + " seconds");
 
         // 取消之前的重连任务
         if (reconnectRunnable != null && backgroundHandler != null) {
@@ -303,7 +305,7 @@ public class SingleCamera {
 
         // 创建新的重连任务
         reconnectRunnable = () -> {
-            Log.d(TAG, "Camera " + cameraId + " attempting to reconnect (attempt " + reconnectAttempts + "/" + MAX_RECONNECT_ATTEMPTS + ")...");
+            AppLog.d(TAG, "Camera " + cameraId + " attempting to reconnect (attempt " + reconnectAttempts + "/" + MAX_RECONNECT_ATTEMPTS + ")...");
             try {
                 // 确保之前的资源已清理（捕获并忽略异常）
                 try {
@@ -312,7 +314,7 @@ public class SingleCamera {
                         captureSession = null;
                     }
                 } catch (Exception e) {
-                    Log.w(TAG, "Camera " + cameraId + " exception while closing session during reconnect (expected): " + e.getMessage());
+                    AppLog.w(TAG, "Camera " + cameraId + " exception while closing session during reconnect (expected): " + e.getMessage());
                 }
 
                 try {
@@ -321,19 +323,19 @@ public class SingleCamera {
                         cameraDevice = null;
                     }
                 } catch (Exception e) {
-                    Log.w(TAG, "Camera " + cameraId + " exception while closing device during reconnect (expected): " + e.getMessage());
+                    AppLog.w(TAG, "Camera " + cameraId + " exception while closing device during reconnect (expected): " + e.getMessage());
                 }
 
                 // 重新打开摄像头
                 cameraManager.openCamera(cameraId, stateCallback, backgroundHandler);
             } catch (CameraAccessException e) {
-                Log.e(TAG, "Failed to reconnect camera " + cameraId + ": " + e.getMessage());
+                AppLog.e(TAG, "Failed to reconnect camera " + cameraId + ": " + e.getMessage());
                 // 继续尝试重连
                 if (shouldReconnect && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                     scheduleReconnect();
                 }
             } catch (SecurityException e) {
-                Log.e(TAG, "No camera permission during reconnect", e);
+                AppLog.e(TAG, "No camera permission during reconnect", e);
                 shouldReconnect = false;
             }
         };
@@ -352,7 +354,7 @@ public class SingleCamera {
         public void onOpened(@NonNull CameraDevice camera) {
             cameraDevice = camera;
             reconnectAttempts = 0;  // 重置重连计数
-            Log.d(TAG, "Camera " + cameraId + " opened");
+            AppLog.d(TAG, "Camera " + cameraId + " opened");
             if (callback != null) {
                 callback.onCameraOpened(cameraId);
             }
@@ -364,10 +366,10 @@ public class SingleCamera {
             try {
                 camera.close();
             } catch (Exception e) {
-                Log.w(TAG, "Camera " + cameraId + " exception while closing on disconnect (expected): " + e.getMessage());
+                AppLog.w(TAG, "Camera " + cameraId + " exception while closing on disconnect (expected): " + e.getMessage());
             }
             cameraDevice = null;
-            Log.w(TAG, "Camera " + cameraId + " DISCONNECTED - will attempt to reconnect...");
+            AppLog.w(TAG, "Camera " + cameraId + " DISCONNECTED - will attempt to reconnect...");
             if (callback != null) {
                 callback.onCameraError(cameraId, -4); // 自定义错误码：断开连接
             }
@@ -383,7 +385,7 @@ public class SingleCamera {
             try {
                 camera.close();
             } catch (Exception e) {
-                Log.w(TAG, "Camera " + cameraId + " exception while closing on error (expected): " + e.getMessage());
+                AppLog.w(TAG, "Camera " + cameraId + " exception while closing on error (expected): " + e.getMessage());
             }
             cameraDevice = null;
             String errorMsg = "UNKNOWN";
@@ -412,7 +414,7 @@ public class SingleCamera {
                     break;
             }
 
-            Log.e(TAG, "Camera " + cameraId + " error: " + errorMsg);
+            AppLog.e(TAG, "Camera " + cameraId + " error: " + errorMsg);
             if (callback != null) {
                 callback.onCameraError(cameraId, error);
             }
@@ -429,13 +431,13 @@ public class SingleCamera {
      */
     private void createCameraPreviewSession() {
         try {
-            Log.d(TAG, "createCameraPreviewSession: Starting for camera " + cameraId);
+            AppLog.d(TAG, "createCameraPreviewSession: Starting for camera " + cameraId);
 
             SurfaceTexture surfaceTexture = textureView.getSurfaceTexture();
             if (surfaceTexture == null) {
-                Log.e(TAG, "Surface not available for camera " + cameraId);
-                Log.e(TAG, "TextureView available: " + textureView.isAvailable());
-                Log.e(TAG, "SurfaceTexture: " + textureView.getSurfaceTexture());
+                AppLog.e(TAG, "Surface not available for camera " + cameraId);
+                AppLog.e(TAG, "TextureView available: " + textureView.isAvailable());
+                AppLog.e(TAG, "SurfaceTexture: " + textureView.getSurfaceTexture());
                 return;
             }
 
@@ -444,9 +446,9 @@ public class SingleCamera {
             if (previewSize != null) {
                 // 使用最小的预览尺寸 (例如 320x240)
                 surfaceTexture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
-                Log.d(TAG, "Camera " + cameraId + " buffer size set to: " + previewSize);
+                AppLog.d(TAG, "Camera " + cameraId + " buffer size set to: " + previewSize);
             } else {
-                Log.e(TAG, "Camera " + cameraId + " Cannot set buffer size - previewSize: " + previewSize + ", SurfaceTexture: " + surfaceTexture);
+                AppLog.e(TAG, "Camera " + cameraId + " Cannot set buffer size - previewSize: " + previewSize + ", SurfaceTexture: " + surfaceTexture);
             }
 
             // 如果是后摄像头，确保应用镜像变换
@@ -456,13 +458,13 @@ public class SingleCamera {
 
             // 创建预览请求
             Surface surface = new Surface(surfaceTexture);
-            Log.d(TAG, "Camera " + cameraId + " Surface obtained: " + surface);
+            AppLog.d(TAG, "Camera " + cameraId + " Surface obtained: " + surface);
 
-            Log.d(TAG, "Camera " + cameraId + " Creating capture request...");
+            AppLog.d(TAG, "Camera " + cameraId + " Creating capture request...");
             int template = (recordSurface != null) ? CameraDevice.TEMPLATE_RECORD : CameraDevice.TEMPLATE_PREVIEW;
             final CaptureRequest.Builder previewRequestBuilder = cameraDevice.createCaptureRequest(template);
             previewRequestBuilder.addTarget(surface);
-            Log.d(TAG, "Camera " + cameraId + " Added preview surface to request");
+            AppLog.d(TAG, "Camera " + cameraId + " Added preview surface to request");
 
             // 准备所有输出Surface
             java.util.List<Surface> surfaces = new java.util.ArrayList<>();
@@ -472,43 +474,43 @@ public class SingleCamera {
             if (recordSurface != null) {
                 surfaces.add(recordSurface);
                 previewRequestBuilder.addTarget(recordSurface);
-                Log.d(TAG, "Added record surface to camera " + cameraId);
+                AppLog.d(TAG, "Added record surface to camera " + cameraId);
             }
 
             // 不再在预览会话中添加ImageReader Surface
             // ImageReader将在拍照时按需创建，避免占用额外缓冲区
 
-            Log.d(TAG, "Camera " + cameraId + " Total surfaces: " + surfaces.size());
+            AppLog.d(TAG, "Camera " + cameraId + " Total surfaces: " + surfaces.size());
 
             // 创建会话
-            Log.d(TAG, "Camera " + cameraId + " Creating capture session...");
+            AppLog.d(TAG, "Camera " + cameraId + " Creating capture session...");
             cameraDevice.createCaptureSession(surfaces, new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession session) {
-                    Log.d(TAG, "Camera " + cameraId + " Session configured!");
+                    AppLog.d(TAG, "Camera " + cameraId + " Session configured!");
                     if (cameraDevice == null) {
-                        Log.e(TAG, "Camera " + cameraId + " cameraDevice is null in onConfigured");
+                        AppLog.e(TAG, "Camera " + cameraId + " cameraDevice is null in onConfigured");
                         return;
                     }
 
                     captureSession = session;
                     try {
                         // 开始预览
-                        Log.d(TAG, "Camera " + cameraId + " Setting repeating request...");
+                        AppLog.d(TAG, "Camera " + cameraId + " Setting repeating request...");
                         captureSession.setRepeatingRequest(previewRequestBuilder.build(), null, backgroundHandler);
 
-                        Log.d(TAG, "Camera " + cameraId + " preview started successfully!");
+                        AppLog.d(TAG, "Camera " + cameraId + " preview started successfully!");
                         if (callback != null) {
                             callback.onCameraConfigured(cameraId);
                         }
                     } catch (CameraAccessException e) {
-                        Log.e(TAG, "Failed to start preview for camera " + cameraId, e);
+                        AppLog.e(TAG, "Failed to start preview for camera " + cameraId, e);
                     }
                 }
 
                 @Override
                 public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                    Log.e(TAG, "Failed to configure camera " + cameraId + " session!");
+                    AppLog.e(TAG, "Failed to configure camera " + cameraId + " session!");
                     if (callback != null) {
                         callback.onCameraError(cameraId, -3);
                     }
@@ -516,12 +518,12 @@ public class SingleCamera {
             }, backgroundHandler);
 
         } catch (CameraAccessException e) {
-            Log.e(TAG, "Failed to create preview session for camera " + cameraId, e);
-            Log.e(TAG, "Exception details: " + e.getMessage());
+            AppLog.e(TAG, "Failed to create preview session for camera " + cameraId, e);
+            AppLog.e(TAG, "Exception details: " + e.getMessage());
             e.printStackTrace();
         } catch (Exception e) {
-            Log.e(TAG, "Unexpected exception creating session for camera " + cameraId, e);
-            Log.e(TAG, "Exception details: " + e.getMessage());
+            AppLog.e(TAG, "Unexpected exception creating session for camera " + cameraId, e);
+            AppLog.e(TAG, "Exception details: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -540,7 +542,7 @@ public class SingleCamera {
                 try {
                     previewSurface.release();
                 } catch (Exception e) {
-                    Log.w(TAG, "Camera " + cameraId + " exception while releasing old preview surface: " + e.getMessage());
+                    AppLog.w(TAG, "Camera " + cameraId + " exception while releasing old preview surface: " + e.getMessage());
                 }
                 previewSurface = null;
             }
@@ -553,12 +555,12 @@ public class SingleCamera {
      */
     public void takePicture() {
         if (textureView == null || !textureView.isAvailable()) {
-            Log.e(TAG, "Camera " + cameraId + " TextureView not available");
+            AppLog.e(TAG, "Camera " + cameraId + " TextureView not available");
             return;
         }
 
         if (previewSize == null) {
-            Log.e(TAG, "Camera " + cameraId + " preview size not available");
+            AppLog.e(TAG, "Camera " + cameraId + " preview size not available");
             return;
         }
 
@@ -575,13 +577,13 @@ public class SingleCamera {
                     if (bitmap != null) {
                         saveBitmapAsJPEG(bitmap);
                         bitmap.recycle();
-                        Log.d(TAG, "Camera " + cameraId + " picture captured from TextureView (" +
+                        AppLog.d(TAG, "Camera " + cameraId + " picture captured from TextureView (" +
                               bitmap.getWidth() + "x" + bitmap.getHeight() + ")");
                     } else {
-                        Log.e(TAG, "Camera " + cameraId + " failed to get bitmap from TextureView");
+                        AppLog.e(TAG, "Camera " + cameraId + " failed to get bitmap from TextureView");
                     }
                 } catch (Exception e) {
-                    Log.e(TAG, "Camera " + cameraId + " error capturing picture", e);
+                    AppLog.e(TAG, "Camera " + cameraId + " error capturing picture", e);
                 }
             });
         }
@@ -607,15 +609,15 @@ public class SingleCamera {
             output = new FileOutputStream(photoFile);
             bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, output);
             output.flush();
-            Log.d(TAG, "Photo saved: " + photoFile.getAbsolutePath());
+            AppLog.d(TAG, "Photo saved: " + photoFile.getAbsolutePath());
         } catch (IOException e) {
-            Log.e(TAG, "Failed to save photo", e);
+            AppLog.e(TAG, "Failed to save photo", e);
         } finally {
             if (output != null) {
                 try {
                     output.close();
                 } catch (IOException e) {
-                    Log.e(TAG, "Failed to close output stream", e);
+                    AppLog.e(TAG, "Failed to close output stream", e);
                 }
             }
         }
@@ -639,7 +641,7 @@ public class SingleCamera {
             try {
                 captureSession.close();
             } catch (Exception e) {
-                Log.w(TAG, "Camera " + cameraId + " exception while closing session (expected): " + e.getMessage());
+                AppLog.w(TAG, "Camera " + cameraId + " exception while closing session (expected): " + e.getMessage());
             }
             captureSession = null;
         }
@@ -649,7 +651,7 @@ public class SingleCamera {
             try {
                 cameraDevice.close();
             } catch (Exception e) {
-                Log.w(TAG, "Camera " + cameraId + " exception while closing device (expected): " + e.getMessage());
+                AppLog.w(TAG, "Camera " + cameraId + " exception while closing device (expected): " + e.getMessage());
             }
             cameraDevice = null;
         }
@@ -658,9 +660,9 @@ public class SingleCamera {
         if (previewSurface != null) {
             try {
                 previewSurface.release();
-                Log.d(TAG, "Camera " + cameraId + " released preview surface");
+                AppLog.d(TAG, "Camera " + cameraId + " released preview surface");
             } catch (Exception e) {
-                Log.w(TAG, "Camera " + cameraId + " exception while releasing preview surface: " + e.getMessage());
+                AppLog.w(TAG, "Camera " + cameraId + " exception while releasing preview surface: " + e.getMessage());
             }
             previewSurface = null;
         }
@@ -669,16 +671,16 @@ public class SingleCamera {
         if (imageReader != null) {
             try {
                 imageReader.close();
-                Log.d(TAG, "Camera " + cameraId + " released image reader");
+                AppLog.d(TAG, "Camera " + cameraId + " released image reader");
             } catch (Exception e) {
-                Log.w(TAG, "Camera " + cameraId + " exception while closing image reader: " + e.getMessage());
+                AppLog.w(TAG, "Camera " + cameraId + " exception while closing image reader: " + e.getMessage());
             }
             imageReader = null;
         }
 
         stopBackgroundThread();
 
-        Log.d(TAG, "Camera " + cameraId + " closed");
+        AppLog.d(TAG, "Camera " + cameraId + " closed");
         if (callback != null) {
             callback.onCameraClosed(cameraId);
         }
@@ -688,7 +690,7 @@ public class SingleCamera {
      * 手动触发重连（重置重连计数）
      */
     public void reconnect() {
-        Log.d(TAG, "Camera " + cameraId + " manual reconnect requested");
+        AppLog.d(TAG, "Camera " + cameraId + " manual reconnect requested");
         reconnectAttempts = 0;
         shouldReconnect = true;
         closeCamera();

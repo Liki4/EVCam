@@ -1,5 +1,7 @@
 package com.kooo.evcam.dingtalk;
 
+
+import com.kooo.evcam.AppLog;
 import android.graphics.Bitmap;
 import android.media.MediaMetadataRetriever;
 import android.util.Log;
@@ -33,7 +35,7 @@ public class VideoThumbnailExtractor {
             Bitmap bitmap = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
 
             if (bitmap == null) {
-                Log.e(TAG, "无法从视频中提取帧: " + videoFile.getName());
+                AppLog.e(TAG, "无法从视频中提取帧: " + videoFile.getName());
                 return false;
             }
 
@@ -42,11 +44,11 @@ public class VideoThumbnailExtractor {
             bitmap.compress(Bitmap.CompressFormat.JPEG, 85, fos);
             fos.flush();
 
-            Log.d(TAG, "封面图提取成功: " + outputFile.getAbsolutePath());
+            AppLog.d(TAG, "封面图提取成功: " + outputFile.getAbsolutePath());
             return true;
 
         } catch (Exception e) {
-            Log.e(TAG, "提取封面图失败: " + videoFile.getName(), e);
+            AppLog.e(TAG, "提取封面图失败: " + videoFile.getName(), e);
             return false;
         } finally {
             try {
@@ -57,7 +59,7 @@ public class VideoThumbnailExtractor {
                     fos.close();
                 }
             } catch (IOException e) {
-                Log.e(TAG, "关闭资源失败", e);
+                AppLog.e(TAG, "关闭资源失败", e);
             }
         }
     }
@@ -77,17 +79,17 @@ public class VideoThumbnailExtractor {
             if (durationStr != null) {
                 long durationMs = Long.parseLong(durationStr);
                 int durationSec = (int) (durationMs / 1000);
-                Log.d(TAG, "视频时长: " + durationSec + " 秒");
+                AppLog.d(TAG, "视频时长: " + durationSec + " 秒");
                 return durationSec;
             }
         } catch (Exception e) {
-            Log.e(TAG, "获取视频时长失败: " + videoFile.getName(), e);
+            AppLog.e(TAG, "获取视频时长失败: " + videoFile.getName(), e);
         } finally {
             if (retriever != null) {
                 try {
                     retriever.release();
                 } catch (Exception e) {
-                    Log.e(TAG, "释放 MediaMetadataRetriever 失败", e);
+                    AppLog.e(TAG, "释放 MediaMetadataRetriever 失败", e);
                 }
             }
         }

@@ -1,5 +1,7 @@
 package com.kooo.evcam.dingtalk;
 
+
+import com.kooo.evcam.AppLog;
 import android.util.Log;
 
 import com.google.gson.Gson;
@@ -53,7 +55,7 @@ public class DingTalkStreamClient extends WebSocketListener {
      */
     public void start() {
         if (isRunning) {
-            Log.w(TAG, "Stream 客户端已在运行");
+            AppLog.w(TAG, "Stream 客户端已在运行");
             return;
         }
 
@@ -79,11 +81,11 @@ public class DingTalkStreamClient extends WebSocketListener {
         try {
             // 获取 Stream 连接信息
             DingTalkApiClient.StreamConnection connection = apiClient.getStreamConnection();
-            Log.d(TAG, "正在连接到: " + connection.endpoint);
+            AppLog.d(TAG, "正在连接到: " + connection.endpoint);
 
             // 构建 WebSocket URL，添加 ticket 参数
             String wsUrl = connection.endpoint + "?ticket=" + connection.ticket;
-            Log.d(TAG, "WebSocket URL: " + wsUrl);
+            AppLog.d(TAG, "WebSocket URL: " + wsUrl);
 
             Request request = new Request.Builder()
                     .url(wsUrl)
@@ -92,7 +94,7 @@ public class DingTalkStreamClient extends WebSocketListener {
             webSocket = httpClient.newWebSocket(request, this);
 
         } catch (Exception e) {
-            Log.e(TAG, "连接失败", e);
+            AppLog.e(TAG, "连接失败", e);
             callback.onError("连接失败: " + e.getMessage());
             scheduleReconnect();
         }
@@ -106,7 +108,7 @@ public class DingTalkStreamClient extends WebSocketListener {
             return;
         }
 
-        Log.d(TAG, "将在 " + RECONNECT_DELAY_MS + "ms 后重连");
+        AppLog.d(TAG, "将在 " + RECONNECT_DELAY_MS + "ms 后重连");
         new Thread(() -> {
             try {
                 Thread.sleep(RECONNECT_DELAY_MS);
@@ -114,20 +116,20 @@ public class DingTalkStreamClient extends WebSocketListener {
                     connect();
                 }
             } catch (InterruptedException e) {
-                Log.e(TAG, "重连被中断", e);
+                AppLog.e(TAG, "重连被中断", e);
             }
         }).start();
     }
 
     @Override
     public void onOpen(WebSocket webSocket, Response response) {
-        Log.d(TAG, "WebSocket 连接已建立");
+        AppLog.d(TAG, "WebSocket 连接已建立");
         callback.onConnected();
     }
 
     @Override
     public void onMessage(WebSocket webSocket, String text) {
-        Log.d(TAG, "收到消息: " + text);
+        AppLog.d(TAG, "收到消息: " + text);
 
         try {
             JsonObject message = gson.fromJson(text, JsonObject.class);
@@ -151,7 +153,7 @@ public class DingTalkStreamClient extends WebSocketListener {
             }
 
         } catch (Exception e) {
-            Log.e(TAG, "处理消息失败", e);
+            AppLog.e(TAG, "处理消息失败", e);
         }
     }
 
@@ -163,7 +165,7 @@ public class DingTalkStreamClient extends WebSocketListener {
             JsonObject headers = message.getAsJsonObject("headers");
             if (headers.has("topic")) {
                 String topic = headers.get("topic").getAsString();
-                Log.d(TAG, "系统消息 topic: " + topic);
+                AppLog.d(TAG, "系统消息 topic: " + topic);
             }
         }
     }
@@ -173,18 +175,18 @@ public class DingTalkStreamClient extends WebSocketListener {
      */
     private void handleCallbackMessage(JsonObject message) {
         try {
-            Log.d(TAG, "处理回调消息，完整消息: " + message.toString());
+            AppLog.d(TAG, "处理回调消息，完整消息: " + message.toString());
 
             if (!message.has("data")) {
-                Log.w(TAG, "消息中没有 data 字段");
+                AppLog.w(TAG, "消息中没有 data 字段");
                 return;
             }
 
             String dataStr = message.get("data").getAsString();
-            Log.d(TAG, "data 字段内容: " + dataStr);
+            AppLog.d(TAG, "data 字段内容: " + dataStr);
 
             JsonObject data = gson.fromJson(dataStr, JsonObject.class);
-            Log.d(TAG, "解析后的 data: " + data.toString());
+            AppLog.d(TAG, "解析后的 data: " + data.toString());
 
             // 检查是否是机器人被 @ 的消息
             if (data.has("conversationType") && data.has("text")) {
@@ -196,25 +198,25 @@ public class DingTalkStreamClient extends WebSocketListener {
                 JsonObject textObj = data.getAsJsonObject("text");
                 String text = textObj.get("content").getAsString();
 
-                Log.d(TAG, "收到机器人消息 - conversationId: " + conversationId);
-                Log.d(TAG, "收到机器人消息 - conversationType: " + conversationType);
-                Log.d(TAG, "收到机器人消息 - senderUserId: " + senderUserId);
-                Log.d(TAG, "收到机器人消息 - text: " + text);
+                AppLog.d(TAG, "收到机器人消息 - conversationId: " + conversationId);
+                AppLog.d(TAG, "收到机器人消息 - conversationType: " + conversationType);
+                AppLog.d(TAG, "收到机器人消息 - senderUserId: " + senderUserId);
+                AppLog.d(TAG, "收到机器人消息 - text: " + text);
 
                 // 检查是否包含 @机器人
                 if (data.has("atUsers")) {
-                    Log.d(TAG, "消息包含 @机器人，触发回调");
+                    AppLog.d(TAG, "消息包含 @机器人，触发回调");
                     callback.onMessageReceived(conversationId, conversationType, senderUserId, text);
                 } else {
-                    Log.w(TAG, "消息不包含 atUsers 字段，忽略");
+                    AppLog.w(TAG, "消息不包含 atUsers 字段，忽略");
                 }
             } else {
-                Log.w(TAG, "消息缺少必要字段 - conversationType: " + data.has("conversationType") +
+                AppLog.w(TAG, "消息缺少必要字段 - conversationType: " + data.has("conversationType") +
                     ", text: " + data.has("text"));
             }
 
         } catch (Exception e) {
-            Log.e(TAG, "处理回调消息失败", e);
+            AppLog.e(TAG, "处理回调消息失败", e);
             e.printStackTrace();
         }
     }
@@ -230,17 +232,17 @@ public class DingTalkStreamClient extends WebSocketListener {
 
         String ackJson = gson.toJson(ack);
         webSocket.send(ackJson);
-        Log.d(TAG, "发送 ACK: " + messageId);
+        AppLog.d(TAG, "发送 ACK: " + messageId);
     }
 
     @Override
     public void onClosing(WebSocket webSocket, int code, String reason) {
-        Log.d(TAG, "WebSocket 正在关闭: " + code + " - " + reason);
+        AppLog.d(TAG, "WebSocket 正在关闭: " + code + " - " + reason);
     }
 
     @Override
     public void onClosed(WebSocket webSocket, int code, String reason) {
-        Log.d(TAG, "WebSocket 已关闭: " + code + " - " + reason);
+        AppLog.d(TAG, "WebSocket 已关闭: " + code + " - " + reason);
         callback.onDisconnected();
 
         if (isRunning) {
@@ -250,7 +252,7 @@ public class DingTalkStreamClient extends WebSocketListener {
 
     @Override
     public void onFailure(WebSocket webSocket, Throwable t, Response response) {
-        Log.e(TAG, "WebSocket 连接失败", t);
+        AppLog.e(TAG, "WebSocket 连接失败", t);
         callback.onError("连接失败: " + t.getMessage());
         callback.onDisconnected();
 

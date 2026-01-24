@@ -1,5 +1,7 @@
 package com.kooo.evcam.dingtalk;
 
+
+import com.kooo.evcam.AppLog;
 import android.util.Log;
 
 import com.google.gson.Gson;
@@ -46,7 +48,7 @@ public class DingTalkApiClient {
         // 检查缓存的 token 是否有效
         if (config.isTokenValid()) {
             String cachedToken = config.getAccessToken();
-            Log.d(TAG, "使用缓存的 Access Token");
+            AppLog.d(TAG, "使用缓存的 Access Token");
             return cachedToken;
         }
 
@@ -54,7 +56,7 @@ public class DingTalkApiClient {
         String url = OAPI_URL + "/gettoken?appkey=" + config.getClientId() +
                      "&appsecret=" + config.getClientSecret();
 
-        Log.d(TAG, "正在获取新的 Access Token...");
+        AppLog.d(TAG, "正在获取新的 Access Token...");
 
         Request request = new Request.Builder()
                 .url(url)
@@ -63,7 +65,7 @@ public class DingTalkApiClient {
 
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body().string();
-            Log.d(TAG, "Access Token 响应: " + responseBody);
+            AppLog.d(TAG, "Access Token 响应: " + responseBody);
 
             if (!response.isSuccessful()) {
                 throw new IOException("获取 Access Token 失败: " + response.code() + " - " + responseBody);
@@ -88,7 +90,7 @@ public class DingTalkApiClient {
                 long expireTime = System.currentTimeMillis() + (expireIn - 300) * 1000;
                 config.saveAccessToken(accessToken, expireTime);
 
-                Log.d(TAG, "Access Token 获取成功");
+                AppLog.d(TAG, "Access Token 获取成功");
                 return accessToken;
             } else {
                 throw new IOException("响应中没有 access_token: " + responseBody);
@@ -113,7 +115,7 @@ public class DingTalkApiClient {
         body.add("text", textObj);
 
         String requestJson = gson.toJson(body);
-        Log.d(TAG, "通过 Webhook 发送消息: " + requestJson);
+        AppLog.d(TAG, "通过 Webhook 发送消息: " + requestJson);
 
         Request request = new Request.Builder()
                 .url(webhookUrl)
@@ -126,10 +128,10 @@ public class DingTalkApiClient {
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                Log.e(TAG, "Webhook 发送消息失败，响应: " + responseBody);
+                AppLog.e(TAG, "Webhook 发送消息失败，响应: " + responseBody);
                 throw new IOException("Webhook 发送消息失败: " + response.code() + ", " + responseBody);
             }
-            Log.d(TAG, "Webhook 消息发送成功，响应: " + responseBody);
+            AppLog.d(TAG, "Webhook 消息发送成功，响应: " + responseBody);
         }
     }
 
@@ -195,7 +197,7 @@ public class DingTalkApiClient {
         body.addProperty("msgParam", gson.toJson(msgParam));
 
         String requestJson = gson.toJson(body);
-        Log.d(TAG, "发送群聊文本消息请求: " + requestJson);
+        AppLog.d(TAG, "发送群聊文本消息请求: " + requestJson);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -209,10 +211,10 @@ public class DingTalkApiClient {
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                Log.e(TAG, "发送群聊文本消息失败，响应: " + responseBody);
+                AppLog.e(TAG, "发送群聊文本消息失败，响应: " + responseBody);
                 throw new IOException("发送群聊文本消息失败: " + response.code() + ", " + responseBody);
             }
-            Log.d(TAG, "群聊文本消息发送成功，响应: " + responseBody);
+            AppLog.d(TAG, "群聊文本消息发送成功，响应: " + responseBody);
         }
     }
 
@@ -238,7 +240,7 @@ public class DingTalkApiClient {
         body.addProperty("msgParam", gson.toJson(msgParam));
 
         String requestJson = gson.toJson(body);
-        Log.d(TAG, "发送单聊文本消息请求: " + requestJson);
+        AppLog.d(TAG, "发送单聊文本消息请求: " + requestJson);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -252,10 +254,10 @@ public class DingTalkApiClient {
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                Log.e(TAG, "发送单聊文本消息失败，响应: " + responseBody);
+                AppLog.e(TAG, "发送单聊文本消息失败，响应: " + responseBody);
                 throw new IOException("发送单聊文本消息失败: " + response.code() + ", " + responseBody);
             }
-            Log.d(TAG, "单聊文本消息发送成功，响应: " + responseBody);
+            AppLog.d(TAG, "单聊文本消息发送成功，响应: " + responseBody);
         }
     }
 
@@ -307,7 +309,7 @@ public class DingTalkApiClient {
 
             if (jsonResponse.has("media_id")) {
                 String mediaId = jsonResponse.get("media_id").getAsString();
-                Log.d(TAG, type + " 上传成功，media_id: " + mediaId);
+                AppLog.d(TAG, type + " 上传成功，media_id: " + mediaId);
                 return mediaId;
             } else {
                 throw new IOException("响应中没有 media_id: " + responseBody);
@@ -356,7 +358,7 @@ public class DingTalkApiClient {
         body.addProperty("msgParam", gson.toJson(msgParam));
 
         String requestJson = gson.toJson(body);
-        Log.d(TAG, "发送群聊文件消息请求: " + requestJson);
+        AppLog.d(TAG, "发送群聊文件消息请求: " + requestJson);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -370,10 +372,10 @@ public class DingTalkApiClient {
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                Log.e(TAG, "发送群聊文件消息失败，响应: " + responseBody);
+                AppLog.e(TAG, "发送群聊文件消息失败，响应: " + responseBody);
                 throw new IOException("发送群聊文件消息失败: " + response.code() + ", " + responseBody);
             }
-            Log.d(TAG, "群聊文件消息发送成功，响应: " + responseBody);
+            AppLog.d(TAG, "群聊文件消息发送成功，响应: " + responseBody);
         }
     }
 
@@ -405,7 +407,7 @@ public class DingTalkApiClient {
         body.addProperty("msgParam", gson.toJson(msgParam));
 
         String requestJson = gson.toJson(body);
-        Log.d(TAG, "发送单聊文件消息请求: " + requestJson);
+        AppLog.d(TAG, "发送单聊文件消息请求: " + requestJson);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -419,10 +421,10 @@ public class DingTalkApiClient {
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                Log.e(TAG, "发送单聊文件消息失败，响应: " + responseBody);
+                AppLog.e(TAG, "发送单聊文件消息失败，响应: " + responseBody);
                 throw new IOException("发送单聊文件消息失败: " + response.code() + ", " + responseBody);
             }
-            Log.d(TAG, "单聊文件消息发送成功，响应: " + responseBody);
+            AppLog.d(TAG, "单聊文件消息发送成功，响应: " + responseBody);
         }
     }
 
@@ -472,7 +474,7 @@ public class DingTalkApiClient {
         body.addProperty("msgParam", gson.toJson(msgParam));
 
         String requestJson = gson.toJson(body);
-        Log.d(TAG, "发送群聊视频消息请求: " + requestJson);
+        AppLog.d(TAG, "发送群聊视频消息请求: " + requestJson);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -486,10 +488,10 @@ public class DingTalkApiClient {
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                Log.e(TAG, "发送群聊视频消息失败，响应: " + responseBody);
+                AppLog.e(TAG, "发送群聊视频消息失败，响应: " + responseBody);
                 throw new IOException("发送群聊视频消息失败: " + response.code() + ", " + responseBody);
             }
-            Log.d(TAG, "群聊视频消息发送成功，响应: " + responseBody);
+            AppLog.d(TAG, "群聊视频消息发送成功，响应: " + responseBody);
         }
     }
 
@@ -520,7 +522,7 @@ public class DingTalkApiClient {
         body.addProperty("msgParam", gson.toJson(msgParam));
 
         String requestJson = gson.toJson(body);
-        Log.d(TAG, "发送单聊视频消息请求: " + requestJson);
+        AppLog.d(TAG, "发送单聊视频消息请求: " + requestJson);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -534,10 +536,10 @@ public class DingTalkApiClient {
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                Log.e(TAG, "发送单聊视频消息失败，响应: " + responseBody);
+                AppLog.e(TAG, "发送单聊视频消息失败，响应: " + responseBody);
                 throw new IOException("发送单聊视频消息失败: " + response.code() + ", " + responseBody);
             }
-            Log.d(TAG, "单聊视频消息发送成功，响应: " + responseBody);
+            AppLog.d(TAG, "单聊视频消息发送成功，响应: " + responseBody);
         }
     }
 
@@ -579,7 +581,7 @@ public class DingTalkApiClient {
         body.addProperty("msgParam", gson.toJson(msgParam));
 
         String requestJson = gson.toJson(body);
-        Log.d(TAG, "发送群聊图片消息请求: " + requestJson);
+        AppLog.d(TAG, "发送群聊图片消息请求: " + requestJson);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -593,10 +595,10 @@ public class DingTalkApiClient {
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                Log.e(TAG, "发送群聊图片消息失败，响应: " + responseBody);
+                AppLog.e(TAG, "发送群聊图片消息失败，响应: " + responseBody);
                 throw new IOException("发送群聊图片消息失败: " + response.code() + ", " + responseBody);
             }
-            Log.d(TAG, "群聊图片消息发送成功，响应: " + responseBody);
+            AppLog.d(TAG, "群聊图片消息发送成功，响应: " + responseBody);
         }
     }
 
@@ -622,7 +624,7 @@ public class DingTalkApiClient {
         body.addProperty("msgParam", gson.toJson(msgParam));
 
         String requestJson = gson.toJson(body);
-        Log.d(TAG, "发送单聊图片消息请求: " + requestJson);
+        AppLog.d(TAG, "发送单聊图片消息请求: " + requestJson);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -636,10 +638,10 @@ public class DingTalkApiClient {
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                Log.e(TAG, "发送单聊图片消息失败，响应: " + responseBody);
+                AppLog.e(TAG, "发送单聊图片消息失败，响应: " + responseBody);
                 throw new IOException("发送单聊图片消息失败: " + response.code() + ", " + responseBody);
             }
-            Log.d(TAG, "单聊图片消息发送成功，响应: " + responseBody);
+            AppLog.d(TAG, "单聊图片消息发送成功，响应: " + responseBody);
         }
     }
 
@@ -683,7 +685,7 @@ public class DingTalkApiClient {
         body.addProperty("msgParam", gson.toJson(msgParam));
 
         String requestJson = gson.toJson(body);
-        Log.d(TAG, "发送群聊Markdown消息请求: " + requestJson);
+        AppLog.d(TAG, "发送群聊Markdown消息请求: " + requestJson);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -697,10 +699,10 @@ public class DingTalkApiClient {
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                Log.e(TAG, "发送群聊Markdown消息失败，响应: " + responseBody);
+                AppLog.e(TAG, "发送群聊Markdown消息失败，响应: " + responseBody);
                 throw new IOException("发送群聊Markdown消息失败: " + response.code() + ", " + responseBody);
             }
-            Log.d(TAG, "群聊Markdown消息发送成功，响应: " + responseBody);
+            AppLog.d(TAG, "群聊Markdown消息发送成功，响应: " + responseBody);
         }
     }
 
@@ -727,7 +729,7 @@ public class DingTalkApiClient {
         body.addProperty("msgParam", gson.toJson(msgParam));
 
         String requestJson = gson.toJson(body);
-        Log.d(TAG, "发送单聊Markdown消息请求: " + requestJson);
+        AppLog.d(TAG, "发送单聊Markdown消息请求: " + requestJson);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -741,10 +743,10 @@ public class DingTalkApiClient {
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
-                Log.e(TAG, "发送单聊Markdown消息失败，响应: " + responseBody);
+                AppLog.e(TAG, "发送单聊Markdown消息失败，响应: " + responseBody);
                 throw new IOException("发送单聊Markdown消息失败: " + response.code() + ", " + responseBody);
             }
-            Log.d(TAG, "单聊Markdown消息发送成功，响应: " + responseBody);
+            AppLog.d(TAG, "单聊Markdown消息发送成功，响应: " + responseBody);
         }
     }
 
@@ -789,7 +791,7 @@ public class DingTalkApiClient {
         body.add("subscriptions", subscriptions);
 
         String requestJson = gson.toJson(body);
-        Log.d(TAG, "Stream 请求: " + requestJson);
+        AppLog.d(TAG, "Stream 请求: " + requestJson);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -801,7 +803,7 @@ public class DingTalkApiClient {
 
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body().string();
-            Log.d(TAG, "Stream 响应: " + responseBody);
+            AppLog.d(TAG, "Stream 响应: " + responseBody);
 
             if (!response.isSuccessful()) {
                 throw new IOException("获取 Stream 连接信息失败: " + response.code() + " - " + responseBody);
@@ -812,7 +814,7 @@ public class DingTalkApiClient {
             if (jsonResponse.has("endpoint") && jsonResponse.has("ticket")) {
                 String endpoint = jsonResponse.get("endpoint").getAsString();
                 String ticket = jsonResponse.get("ticket").getAsString();
-                Log.d(TAG, "Stream 连接信息获取成功: " + endpoint);
+                AppLog.d(TAG, "Stream 连接信息获取成功: " + endpoint);
                 return new StreamConnection(endpoint, ticket);
             } else {
                 throw new IOException("响应中缺少 endpoint 或 ticket: " + responseBody);

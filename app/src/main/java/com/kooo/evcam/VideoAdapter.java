@@ -1,5 +1,7 @@
 package com.kooo.evcam;
 
+
+import com.kooo.evcam.AppLog;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;

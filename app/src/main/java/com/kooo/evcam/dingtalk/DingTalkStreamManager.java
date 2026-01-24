@@ -1,5 +1,7 @@
 package com.kooo.evcam.dingtalk;
 
+
+import com.kooo.evcam.AppLog;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -73,7 +75,7 @@ public class DingTalkStreamManager {
      */
     public void start(CommandCallback commandCallback, boolean enableAutoReconnect) {
         if (isRunning) {
-            Log.w(TAG, "Stream 客户端已在运行");
+            AppLog.w(TAG, "Stream 客户端已在运行");
             return;
         }
 
@@ -89,13 +91,13 @@ public class DingTalkStreamManager {
      */
     private void startConnection() {
         if (isRunning) {
-            Log.w(TAG, "Stream 客户端已在运行");
+            AppLog.w(TAG, "Stream 客户端已在运行");
             return;
         }
 
         new Thread(() -> {
             try {
-                Log.d(TAG, "正在初始化钉钉 Stream 客户端...");
+                AppLog.d(TAG, "正在初始化钉钉 Stream 客户端...");
 
                 // 创建消息监听器
                 messageListener = new ChatbotMessageListener(context, apiClient, currentCommandCallback, mainHandler);
@@ -109,26 +111,26 @@ public class DingTalkStreamManager {
                         .registerCallbackListener(BOT_MESSAGE_TOPIC, messageListener)
                         .build();
 
-                Log.d(TAG, "Stream 客户端已创建，正在启动连接...");
+                AppLog.d(TAG, "Stream 客户端已创建，正在启动连接...");
 
                 // 启动连接
                 streamClient.start();
 
                 isRunning = true;
                 reconnectAttempts = 0; // 重置重连计数
-                Log.d(TAG, "Stream 客户端已启动");
+                AppLog.d(TAG, "Stream 客户端已启动");
 
                 // 通知连接成功
                 mainHandler.post(() -> callback.onConnected());
 
             } catch (Exception e) {
-                Log.e(TAG, "启动 Stream 客户端失败", e);
+                AppLog.e(TAG, "启动 Stream 客户端失败", e);
                 isRunning = false;
 
                 // 如果启用了自动重连，尝试重连
                 if (autoReconnect && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                     reconnectAttempts++;
-                    Log.d(TAG, "将在 " + RECONNECT_DELAY_MS + "ms 后尝试第 " + reconnectAttempts + " 次重连");
+                    AppLog.d(TAG, "将在 " + RECONNECT_DELAY_MS + "ms 后尝试第 " + reconnectAttempts + " 次重连");
                     mainHandler.postDelayed(() -> {
                         if (autoReconnect) { // 再次检查是否仍需要重连
                             startConnection();
@@ -156,19 +158,19 @@ public class DingTalkStreamManager {
         new Thread(() -> {
             try {
                 if (streamClient != null) {
-                    Log.d(TAG, "正在停止 Stream 客户端...");
+                    AppLog.d(TAG, "正在停止 Stream 客户端...");
                     // OpenDingTalkClient doesn't have a close() method
                     // Just set to null to allow garbage collection
                     streamClient = null;
                 }
 
                 isRunning = false;
-                Log.d(TAG, "Stream 客户端已停止");
+                AppLog.d(TAG, "Stream 客户端已停止");
 
                 mainHandler.post(() -> callback.onDisconnected());
 
             } catch (Exception e) {
-                Log.e(TAG, "停止 Stream 客户端失败", e);
+                AppLog.e(TAG, "停止 Stream 客户端失败", e);
             }
         }).start();
     }
@@ -204,11 +206,11 @@ public class DingTalkStreamManager {
         public EventAckStatus execute(String messageJson) {
             try {
                 // 记录原始消息用于调试
-                Log.d(TAG, "收到原始消息JSON: " + messageJson);
+                AppLog.d(TAG, "收到原始消息JSON: " + messageJson);
 
                 // 解析 JSON 字符串
                 JSONObject message = new JSONObject(messageJson);
-                Log.d(TAG, "解析后的消息对象: " + message.toString());
+                AppLog.d(TAG, "解析后的消息对象: " + message.toString());
 
                 String content = null;
                 String conversationId = null;
@@ -247,32 +249,32 @@ public class DingTalkStreamManager {
 
                 // 如果消息为空，可能是其他类型的事件（如加入群聊等），直接返回成功
                 if (content == null || content.isEmpty()) {
-                    Log.d(TAG, "消息内容为空，可能是非文本消息或系统事件");
-                    Log.d(TAG, "完整消息结构: " + message.toString(2));
+                    AppLog.d(TAG, "消息内容为空，可能是非文本消息或系统事件");
+                    AppLog.d(TAG, "完整消息结构: " + message.toString(2));
                     return EventAckStatus.SUCCESS;
                 }
 
-                Log.d(TAG, "解析成功 - 内容: " + content);
-                Log.d(TAG, "解析成功 - 会话ID: " + conversationId);
-                Log.d(TAG, "解析成功 - 会话类型: " + conversationType);
-                Log.d(TAG, "解析成功 - 发送者ID: " + senderId);
-                Log.d(TAG, "解析成功 - SessionWebhook: " + sessionWebhook);
+                AppLog.d(TAG, "解析成功 - 内容: " + content);
+                AppLog.d(TAG, "解析成功 - 会话ID: " + conversationId);
+                AppLog.d(TAG, "解析成功 - 会话类型: " + conversationType);
+                AppLog.d(TAG, "解析成功 - 发送者ID: " + senderId);
+                AppLog.d(TAG, "解析成功 - SessionWebhook: " + sessionWebhook);
 
                 // 检查 sessionWebhook 是否有效
                 if (sessionWebhook.isEmpty()) {
-                    Log.w(TAG, "SessionWebhook 为空，无法回复");
+                    AppLog.w(TAG, "SessionWebhook 为空，无法回复");
                     return EventAckStatus.SUCCESS;
                 }
 
                 // 解析指令
                 String command = parseCommand(content);
-                Log.d(TAG, "解析的指令: " + command);
+                AppLog.d(TAG, "解析的指令: " + command);
 
                 // 解析录制时长（秒）
                 int durationSeconds = parseRecordDuration(command);
 
                 if (command.startsWith("录制") || command.toLowerCase().startsWith("record")) {
-                    Log.d(TAG, "收到录制指令，时长: " + durationSeconds + " 秒");
+                    AppLog.d(TAG, "收到录制指令，时长: " + durationSeconds + " 秒");
 
                     // 发送确认消息
                     String confirmMsg = String.format("收到录制指令，开始录制 %d 秒视频...", durationSeconds);
@@ -285,7 +287,7 @@ public class DingTalkStreamManager {
                     mainHandler.post(() -> commandCallback.onRecordCommand(finalConversationId, finalConversationType, finalSenderId, durationSeconds));
 
                 } else if ("拍照".equals(command) || "photo".equalsIgnoreCase(command)) {
-                    Log.d(TAG, "收到拍照指令");
+                    AppLog.d(TAG, "收到拍照指令");
 
                     // 发送确认消息
                     sendResponse(sessionWebhook, "收到拍照指令，正在拍照...");
@@ -305,7 +307,7 @@ public class DingTalkStreamManager {
                         "• 帮助 - 显示此帮助信息");
 
                 } else {
-                    Log.d(TAG, "未识别的指令: " + command);
+                    AppLog.d(TAG, "未识别的指令: " + command);
                     sendResponse(sessionWebhook,
                         "未识别的指令。发送「帮助」查看可用指令。");
                 }
@@ -313,7 +315,7 @@ public class DingTalkStreamManager {
                 return EventAckStatus.SUCCESS;
 
             } catch (Exception e) {
-                Log.e(TAG, "处理机器人消息失败", e);
+                AppLog.e(TAG, "处理机器人消息失败", e);
                 return EventAckStatus.LATER;
             }
         }
@@ -359,7 +361,7 @@ public class DingTalkStreamManager {
                 }
                 return duration;
             } catch (NumberFormatException e) {
-                Log.w(TAG, "无法解析录制时长: " + durationStr + "，使用默认值 60 秒");
+                AppLog.w(TAG, "无法解析录制时长: " + durationStr + "，使用默认值 60 秒");
                 return 60;
             }
         }
@@ -371,9 +373,9 @@ public class DingTalkStreamManager {
             new Thread(() -> {
                 try {
                     apiClient.sendMessageViaWebhook(sessionWebhook, message);
-                    Log.d(TAG, "响应消息已发送: " + message);
+                    AppLog.d(TAG, "响应消息已发送: " + message);
                 } catch (Exception e) {
-                    Log.e(TAG, "发送响应消息失败", e);
+                    AppLog.e(TAG, "发送响应消息失败", e);
                 }
             }).start();
         }
