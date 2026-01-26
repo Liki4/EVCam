@@ -308,22 +308,66 @@ public class StorageHelper {
             
             AppLog.d(TAG, "扫描 /storage/ 目录，找到 " + files.length + " 个子目录");
             
+            // 获取内部存储路径，用于排除
+            String internalStoragePath = Environment.getExternalStorageDirectory().getAbsolutePath();
+            AppLog.d(TAG, "内部存储路径: " + internalStoragePath);
+            
             for (File file : files) {
-                String name = file.getName();
-                AppLog.d(TAG, "  - " + name + " (isDir=" + file.isDirectory() + 
+                String name = file.getName().toLowerCase();
+                String absPath = file.getAbsolutePath();
+                AppLog.d(TAG, "  - " + file.getName() + " (isDir=" + file.isDirectory() + 
                         ", canRead=" + file.canRead() + ", canWrite=" + file.canWrite() + ")");
                 
-                // 跳过内部存储和 self 目录
-                if (name.equals("emulated") || name.equals("self")) {
+                // 跳过内部存储和系统目录
+                if (name.equals("emulated") || name.equals("self") || name.equals("sdcard0")) {
+                    AppLog.d(TAG, "    跳过（系统目录）");
+                    continue;
+                }
+                
+                // 跳过与内部存储相同或包含的路径
+                if (absPath.equals(internalStoragePath) || 
+                    internalStoragePath.startsWith(absPath + "/") ||
+                    absPath.startsWith(internalStoragePath + "/")) {
+                    AppLog.d(TAG, "    跳过（内部存储相关）");
                     continue;
                 }
                 
                 // 检查是否是 SD 卡（通常是类似 xxxx-xxxx 格式或 sdcard1 等）
                 if (file.isDirectory() && file.canRead()) {
+                    // 优先检查 xxxx-xxxx 格式（典型的 SD 卡命名）
+                    boolean looksLikeSdCard = name.matches("[0-9a-f]{4}-[0-9a-f]{4}") ||
+                            name.contains("sdcard1") || name.contains("sd_card") ||
+                            name.contains("external") || name.contains("extsd") ||
+                            name.contains("removable");
+                    
                     // 检查是否有 DCIM 目录或可以创建
                     File dcimDir = new File(file, "DCIM");
-                    if (dcimDir.exists() || file.canWrite()) {
+                    if ((dcimDir.exists() || file.canWrite()) && looksLikeSdCard) {
                         AppLog.d(TAG, "通过扫描 /storage/ 找到SD卡: " + file.getAbsolutePath());
+                        return file;
+                    }
+                }
+            }
+            
+            // 第二轮：如果没有找到明显的 SD 卡，放宽条件（但仍排除内部存储）
+            for (File file : files) {
+                String name = file.getName().toLowerCase();
+                String absPath = file.getAbsolutePath();
+                
+                // 同样的排除条件
+                if (name.equals("emulated") || name.equals("self") || name.equals("sdcard0")) {
+                    continue;
+                }
+                if (absPath.equals(internalStoragePath) || 
+                    internalStoragePath.startsWith(absPath + "/") ||
+                    absPath.startsWith(internalStoragePath + "/")) {
+                    continue;
+                }
+                
+                if (file.isDirectory() && file.canRead()) {
+                    File dcimDir = new File(file, "DCIM");
+                    if (dcimDir.exists() || file.canWrite()) {
+                        AppLog.d(TAG, "通过扫描 /storage/ 找到SD卡（放宽条件）: " + file.getAbsolutePath());
                         return file;
                     }
                 }
@@ -338,9 +382,9 @@ public class StorageHelper {
      * 方法3：检查常见的 SD 卡挂载点
      */
     private static File getSdCardFromCommonPaths() {
-        // 常见的 SD 卡挂载路径
+        // 常见的 SD 卡挂载路径（车载 Android 设备可能使用这些）
         String[] commonPaths = {
-            "/mnt/sdcard",
+            // 标准路径
             "/mnt/sdcard1",
             "/mnt/sdcard2",
             "/mnt/external_sd",
@@ -348,13 +392,46 @@ public class StorageHelper {
             "/mnt/ext_sd",
             "/mnt/media_rw/sdcard1",
             "/storage/sdcard1",
+            "/storage/sdcard2",
             "/storage/external_SD",
             "/storage/ext_sd",
-            "/storage/removable/sdcard1"
+            "/storage/removable/sdcard1",
+            // 车载系统常见路径
+            "/mnt/usb_storage",
+            "/mnt/usb",
+            "/mnt/usbdisk",
+            "/mnt/usb_disk",
+            "/storage/usb",
+            "/storage/usbdisk",
+            "/storage/usb_storage",
+            "/storage/usb0",
+            "/storage/usb1",
+            // 其他可能的路径
+            "/mnt/sd",
+            "/mnt/SD",
+            "/mnt/tf",
+            "/mnt/TF",
+            "/storage/sd",
+            "/storage/SD",
+            "/storage/tf",
+            "/storage/TF",
+            "/storage/extSdCard",
+            "/storage/external",
+            "/storage/external_storage",
+            "/mnt/external",
+            "/mnt/external_storage"
         };
+        
+        // 获取内部存储路径用于排除
+        String internalStoragePath = Environment.getExternalStorageDirectory().getAbsolutePath();
         
         for (String path : commonPaths) {
             File file = new File(path);
+            // 排除内部存储
+            if (file.getAbsolutePath().equals(internalStoragePath)) {
+                continue;
+            }
+            
             if (file.exists() && file.isDirectory() && file.canRead()) {
                 // 检查是否有 DCIM 目录或可以写入
                 File dcimDir = new File(file, "DCIM");
@@ -375,6 +452,12 @@ public class StorageHelper {
     public static List<String> getStorageDebugInfo(Context context) {
         List<String> info = new ArrayList<>();
         
+        // 0. 显示内部存储路径（用于对比）
+        info.add("=== 内部存储 ===");
+        String internalPath = Environment.getExternalStorageDirectory().getAbsolutePath();
+        info.add("路径: " + internalPath);
+        info.add("");
+        
         // 1. getExternalFilesDirs 信息
         info.add("=== getExternalFilesDirs ===");
         try {
@@ -383,7 +466,8 @@ public class StorageHelper {
                 for (int i = 0; i < externalDirs.length; i++) {
                     File dir = externalDirs[i];
                     if (dir != null) {
-                        info.add("[" + i + "] " + dir.getAbsolutePath());
+                        String label = (i == 0) ? "[0] 内部" : "[" + i + "] 外部";
+                        info.add(label + ": " + dir.getAbsolutePath());
                         info.add("    exists=" + dir.exists() + ", canWrite=" + dir.canWrite());
                     } else {
                         info.add("[" + i + "] null");
@@ -404,11 +488,27 @@ public class StorageHelper {
             File[] files = storageDir.listFiles();
             if (files != null) {
                 for (File file : files) {
-                    info.add(file.getName() + " (dir=" + file.isDirectory() + 
+                    String name = file.getName();
+                    String marker = "";
+                    // 标记内部存储相关目录
+                    if (name.equals("emulated") || name.equals("self") || name.equals("sdcard0")) {
+                        marker = " [内部]";
+                    } else if (name.matches("[0-9a-fA-F]{4}-[0-9a-fA-F]{4}")) {
+                        marker = " [可能是SD卡]";
+                    }
+                    info.add(name + marker + " (dir=" + file.isDirectory() + 
                             ", read=" + file.canRead() + ", write=" + file.canWrite() + ")");
+                    
+                    // 检查是否有 DCIM 目录
+                    if (file.isDirectory()) {
+                        File dcim = new File(file, "DCIM");
+                        if (dcim.exists()) {
+                            info.add("    └─ 有 DCIM 目录");
+                        }
+                    }
                 }
             } else {
-                info.add("无法列出目录内容");
+                info.add("无法列出目录内容（可能需要权限）");
             }
         } catch (Exception e) {
             info.add("错误: " + e.getMessage());
@@ -422,11 +522,18 @@ public class StorageHelper {
             File[] files = mntDir.listFiles();
             if (files != null) {
                 for (File file : files) {
-                    info.add(file.getName() + " (dir=" + file.isDirectory() + 
+                    String name = file.getName();
+                    String marker = "";
+                    if (name.contains("sd") || name.contains("SD") || 
+                        name.contains("usb") || name.contains("USB") ||
+                        name.contains("external") || name.contains("tf") || name.contains("TF")) {
+                        marker = " [可能是外部存储]";
+                    }
+                    info.add(name + marker + " (dir=" + file.isDirectory() + 
                             ", read=" + file.canRead() + ", write=" + file.canWrite() + ")");
                 }
             } else {
-                info.add("无法列出目录内容");
+                info.add("无法列出目录内容（可能需要权限）");
             }
         } catch (Exception e) {
             info.add("错误: " + e.getMessage());
@@ -439,6 +546,13 @@ public class StorageHelper {
         if (sdCard != null) {
             info.add("检测到SD卡: " + sdCard.getAbsolutePath());
             info.add("可写入: " + sdCard.canWrite());
+            
+            // 检查是否与内部存储相同（错误检测）
+            if (sdCard.getAbsolutePath().equals(internalPath) ||
+                sdCard.getAbsolutePath().startsWith(internalPath + "/") ||
+                internalPath.startsWith(sdCard.getAbsolutePath() + "/")) {
+                info.add("⚠️ 警告: 检测的路径可能与内部存储重叠！");
+            }
         } else {
             info.add("未检测到SD卡");
         }

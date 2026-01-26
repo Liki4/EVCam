@@ -43,8 +43,9 @@ public class SettingsFragment extends Fragment {
     private Spinner floatingWindowSizeSpinner;
     private SeekBar floatingWindowAlphaSeekBar;
     private TextView floatingWindowAlphaText;
-    private static final String[] FLOATING_SIZE_OPTIONS = {"小", "中", "大"};
+    private static final String[] FLOATING_SIZE_OPTIONS = {"超小", "特小", "小", "中", "大", "超大", "特大", "特特大", "PLUS大", "MAX大"};
     private boolean isInitializingFloatingSize = false;
+    private int lastAppliedFloatingSize = -1;  // 记录上次应用的大小，避免重复触发
     
     // 车型配置相关
     private Spinner carModelSpinner;
@@ -258,6 +259,9 @@ public class SettingsFragment extends Fragment {
         
         isInitializingFloatingSize = true;
         
+        // 记录当前保存的大小值
+        lastAppliedFloatingSize = appConfig.getFloatingWindowSize();
+        
         ArrayAdapter<String> adapter = new ArrayAdapter<>(
                 getContext(),
                 R.layout.spinner_item,
@@ -269,27 +273,62 @@ public class SettingsFragment extends Fragment {
         floatingWindowSizeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (isInitializingFloatingSize) {
-                    return;
-                }
-                
                 int sizeDp;
                 String sizeName;
                 switch (position) {
                     case 0:
+                        sizeDp = AppConfig.FLOATING_SIZE_TINY;
+                        sizeName = "超小";
+                        break;
+                    case 1:
+                        sizeDp = AppConfig.FLOATING_SIZE_EXTRA_SMALL;
+                        sizeName = "特小";
+                        break;
+                    case 2:
                         sizeDp = AppConfig.FLOATING_SIZE_SMALL;
                         sizeName = "小";
                         break;
-                    case 1:
+                    case 3:
                         sizeDp = AppConfig.FLOATING_SIZE_MEDIUM;
                         sizeName = "中";
                         break;
-                    default:
+                    case 4:
                         sizeDp = AppConfig.FLOATING_SIZE_LARGE;
                         sizeName = "大";
                         break;
+                    case 5:
+                        sizeDp = AppConfig.FLOATING_SIZE_EXTRA_LARGE;
+                        sizeName = "超大";
+                        break;
+                    case 6:
+                        sizeDp = AppConfig.FLOATING_SIZE_HUGE;
+                        sizeName = "特大";
+                        break;
+                    case 7:
+                        sizeDp = AppConfig.FLOATING_SIZE_GIANT;
+                        sizeName = "特特大";
+                        break;
+                    case 8:
+                        sizeDp = AppConfig.FLOATING_SIZE_PLUS;
+                        sizeName = "PLUS大";
+                        break;
+                    default:
+                        sizeDp = AppConfig.FLOATING_SIZE_MAX;
+                        sizeName = "MAX大";
+                        break;
                 }
                 
+                // 初始化阶段不处理
+                if (isInitializingFloatingSize) {
+                    return;
+                }
+                
+                // 与上次应用的值相同，不重复处理
+                if (sizeDp == lastAppliedFloatingSize) {
+                    return;
+                }
+                
+                lastAppliedFloatingSize = sizeDp;
                 appConfig.setFloatingWindowSize(sizeDp);
                 
                 if (getContext() != null && appConfig.isFloatingWindowEnabled()) {
@@ -303,14 +342,29 @@ public class SettingsFragment extends Fragment {
             }
         });
         
+        // 根据当前保存的尺寸确定选中项
         int currentSize = appConfig.getFloatingWindowSize();
         int selectedIndex;
-        if (currentSize <= AppConfig.FLOATING_SIZE_SMALL) {
-            selectedIndex = 0;
+        if (currentSize <= AppConfig.FLOATING_SIZE_TINY) {
+            selectedIndex = 0;  // 超小
+        } else if (currentSize <= AppConfig.FLOATING_SIZE_EXTRA_SMALL) {
+            selectedIndex = 1;  // 特小
+        } else if (currentSize <= AppConfig.FLOATING_SIZE_SMALL) {
+            selectedIndex = 2;  // 小
         } else if (currentSize <= AppConfig.FLOATING_SIZE_MEDIUM) {
-            selectedIndex = 1;
+            selectedIndex = 3;  // 中
+        } else if (currentSize <= AppConfig.FLOATING_SIZE_LARGE) {
+            selectedIndex = 4;  // 大
+        } else if (currentSize <= AppConfig.FLOATING_SIZE_EXTRA_LARGE) {
+            selectedIndex = 5;  // 超大
+        } else if (currentSize <= AppConfig.FLOATING_SIZE_HUGE) {
+            selectedIndex = 6;  // 特大
+        } else if (currentSize <= AppConfig.FLOATING_SIZE_GIANT) {
+            selectedIndex = 7;  // 特特大
+        } else if (currentSize <= AppConfig.FLOATING_SIZE_PLUS) {
+            selectedIndex = 8;  // PLUS大
         } else {
-            selectedIndex = 2;
+            selectedIndex = 9;  // MAX大
         }
         floatingWindowSizeSpinner.setSelection(selectedIndex);
         

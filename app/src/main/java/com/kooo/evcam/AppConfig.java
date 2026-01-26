@@ -32,9 +32,16 @@ public class AppConfig {
     private static final String KEY_FLOATING_WINDOW_Y = "floating_window_y";  // 悬浮窗Y位置
     
     // 悬浮窗大小常量
-    public static final int FLOATING_SIZE_SMALL = 48;   // 小
-    public static final int FLOATING_SIZE_MEDIUM = 64;  // 中
-    public static final int FLOATING_SIZE_LARGE = 80;   // 大
+    public static final int FLOATING_SIZE_TINY = 32;        // 超小
+    public static final int FLOATING_SIZE_EXTRA_SMALL = 40; // 特小
+    public static final int FLOATING_SIZE_SMALL = 48;       // 小
+    public static final int FLOATING_SIZE_MEDIUM = 64;      // 中
+    public static final int FLOATING_SIZE_LARGE = 80;       // 大
+    public static final int FLOATING_SIZE_EXTRA_LARGE = 96; // 超大
+    public static final int FLOATING_SIZE_HUGE = 112;       // 特大
+    public static final int FLOATING_SIZE_GIANT = 128;      // 特特大
+    public static final int FLOATING_SIZE_PLUS = 144;       // PLUS大
+    public static final int FLOATING_SIZE_MAX = 160;        // MAX大
     
     // 录制模式常量
     public static final String RECORDING_MODE_AUTO = "auto";  // 自动（根据车型决定）

@@ -1897,6 +1897,10 @@ public class MainActivity extends AppCompatActivity {
     public void onBackPressed() {
         if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
             drawerLayout.closeDrawer(GravityCompat.START);
+        } else if (getSupportFragmentManager().getBackStackEntryCount() > 0) {
+            // 如果 Fragment 返回栈不为空（在二级菜单中），则返回上一级
+            getSupportFragmentManager().popBackStack();
+            AppLog.d(TAG, "Popped fragment back stack, returning to previous screen");
         } else {
             // 按返回键时将应用移到后台，而不是关闭Activity
             // 这样下次打开应用时能快速恢复，无需重新创建Activity

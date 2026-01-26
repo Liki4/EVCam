@@ -183,8 +183,7 @@ public class FloatingWindowService extends Service {
                 sizePx,
                 sizePx,
                 windowType,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | 
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT
         );
         
@@ -224,8 +223,22 @@ public class FloatingWindowService extends Service {
                         }
                         
                         if (isDragging) {
-                            layoutParams.x = initialX + deltaX;
-                            layoutParams.y = initialY + deltaY;
+                            // 获取屏幕尺寸
+                            DisplayMetrics metrics = getResources().getDisplayMetrics();
+                            int screenWidth = metrics.widthPixels;
+                            int screenHeight = metrics.heightPixels;
+                            int viewSize = layoutParams.width;
+                            
+                            // 计算新位置
+                            int newX = initialX + deltaX;
+                            int newY = initialY + deltaY;
+                            
+                            // 边界限制：确保悬浮窗不会超出屏幕
+                            newX = Math.max(0, Math.min(newX, screenWidth - viewSize));
+                            newY = Math.max(0, Math.min(newY, screenHeight - viewSize));
+                            
+                            layoutParams.x = newX;
+                            layoutParams.y = newY;
                             windowManager.updateViewLayout(floatingView, layoutParams);
                         }
                         return true;
