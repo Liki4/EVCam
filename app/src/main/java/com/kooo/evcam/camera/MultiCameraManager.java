@@ -26,8 +26,7 @@ public class MultiCameraManager {
     private static final String TAG = "MultiCameraManager";
 
     private static final int DEFAULT_MAX_OPEN_CAMERAS = 4;
-    private static final int RECORD_WIDTH = 1280;
-    private static final int RECORD_HEIGHT = 800;
+    // 录制分辨率将使用预览的实际分辨率，不再硬编码
 
     private final Context context;
     private final Map<String, SingleCamera> cameras = new LinkedHashMap<>();
@@ -419,16 +418,27 @@ public class MultiCameraManager {
         }
 
         // 第一步：准备所有 MediaRecorder（但不启动）
+        // 使用每个摄像头的实际预览分辨率，而不是硬编码的值
         boolean prepareSuccess = true;
         for (String key : keys) {
+            SingleCamera camera = cameras.get(key);
             VideoRecorder recorder = recorders.get(key);
-            if (recorder == null) {
+            if (camera == null || recorder == null) {
                 continue;
             }
+            
+            // 获取摄像头的实际预览分辨率
+            Size previewSize = camera.getPreviewSize();
+            if (previewSize == null) {
+                AppLog.e(TAG, "Camera " + key + " preview size not available, using fallback 1280x720");
+                previewSize = new Size(1280, 720);  // 回退到常见分辨率
+            }
+            
             // 所有摄像头使用统一的时间戳：日期_时间_摄像头位置.mp4
             String path = new File(saveDir, timestamp + "_" + key + ".mp4").getAbsolutePath();
-            // 只准备 MediaRecorder，获取 Surface
-            if (!recorder.prepareRecording(path, RECORD_WIDTH, RECORD_HEIGHT)) {
+            // 只准备 MediaRecorder，获取 Surface，使用预览的实际分辨率
+            AppLog.d(TAG, "Preparing recording for " + key + " with size: " + previewSize.getWidth() + "x" + previewSize.getHeight());
+            if (!recorder.prepareRecording(path, previewSize.getWidth(), previewSize.getHeight())) {
                 prepareSuccess = false;
                 break;
             }

@@ -44,7 +44,7 @@ public class SettingsFragment extends Fragment {
     // 车型配置相关
     private Spinner carModelSpinner;
     private Button customCameraConfigButton;
-    private static final String[] CAR_MODEL_OPTIONS = {"银河E5", "银河L6/L7", "自定义车型"};
+    private static final String[] CAR_MODEL_OPTIONS = {"银河E5", "银河L6/L7", "手机", "自定义车型"};
     private boolean isInitializingCarModel = false;  // 标志位：是否正在初始化车型配置
     private String lastAppliedCarModel = null;  // 记录上次已应用的车型，避免初始化触发
 
@@ -315,13 +315,16 @@ public class SettingsFragment extends Fragment {
                 } else if (position == 1) {
                     newModel = AppConfig.CAR_MODEL_L7;
                     modelName = "银河L6/L7";
+                } else if (position == 2) {
+                    newModel = AppConfig.CAR_MODEL_PHONE;
+                    modelName = "手机";
                 } else {
                     newModel = AppConfig.CAR_MODEL_CUSTOM;
                     modelName = "自定义车型";
                 }
 
-                // 始终更新 UI（按钮显隐）
-                updateCustomConfigButtonVisibility(position == 2);
+                // 始终更新 UI（按钮显隐）- 仅自定义车型显示配置按钮
+                updateCustomConfigButtonVisibility(position == 3);
 
                 // 初始化阶段不做“保存/提示”
                 if (isInitializingCarModel) {
@@ -353,8 +356,10 @@ public class SettingsFragment extends Fragment {
         int selectedIndex = 0;  // 默认银河E5
         if (AppConfig.CAR_MODEL_L7.equals(currentModel)) {
             selectedIndex = 1;
-        } else if (AppConfig.CAR_MODEL_CUSTOM.equals(currentModel)) {
+        } else if (AppConfig.CAR_MODEL_PHONE.equals(currentModel)) {
             selectedIndex = 2;
+        } else if (AppConfig.CAR_MODEL_CUSTOM.equals(currentModel)) {
+            selectedIndex = 3;
         }
         carModelSpinner.setSelection(selectedIndex);
         

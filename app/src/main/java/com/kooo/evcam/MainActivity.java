@@ -318,6 +318,13 @@ public class MainActivity extends AppCompatActivity {
             requiredTextureCount = 4;
             AppLog.d(TAG, "使用银河L6/L7配置：竖屏四宫格布局");
         }
+        // 手机：自适应2摄像头布局
+        else if (AppConfig.CAR_MODEL_PHONE.equals(carModel)) {
+            layoutId = R.layout.activity_main_phone;
+            configuredCameraCount = 2;
+            requiredTextureCount = 2;
+            AppLog.d(TAG, "使用手机配置：自适应2摄像头布局");
+        }
         // 自定义车型：根据配置选择布局
         else if (appConfig.isCustomCarModel()) {
             configuredCameraCount = appConfig.getCameraCount();
@@ -716,23 +723,33 @@ public class MainActivity extends AppCompatActivity {
                         int rotation = "left".equals(cameraKey) ? 270 : 90;  // 左顺时针270度(270)，右顺时针90度(90)
                         applyRotationTransform(textureView, previewSize, rotation, cameraKey);
                     } else {
-                        // 前后摄像头：使用原始宽高比（1280x800，横向）
-                        textureView.setAspectRatio(previewSize.getWidth(), previewSize.getHeight());
-                        
-                        // 根据车型和摄像头数量决定显示模式
-                        // L7车型和1摄/2摄模式：使用适应模式，完整显示画面
-                        // E5的4摄模式：启用填满模式，避免黑边
+                        // 前后摄像头
                         String carModel = appConfig.getCarModel();
-                        boolean useFillMode = configuredCameraCount >= 4 && !AppConfig.CAR_MODEL_L7.equals(carModel);
                         
-                        if (useFillMode) {
-                            // 4摄模式（E5）：启用填满模式，避免黑边
-                            textureView.setFillContainer(true);
-                            AppLog.d(TAG, "设置 " + cameraKey + " 宽高比: " + previewSize.getWidth() + ":" + previewSize.getHeight() + ", 填满模式");
-                        } else {
-                            // L7车型或1摄/2摄模式：使用适应模式，完整显示画面
+                        // 手机车型：预览是竖向的，需要应用缩放变换保持比例
+                        if (AppConfig.CAR_MODEL_PHONE.equals(carModel)) {
+                            // 手机竖屏模式：应用缩放变换保持宽高比
                             textureView.setFillContainer(false);
-                            AppLog.d(TAG, "设置 " + cameraKey + " 宽高比: " + previewSize.getWidth() + ":" + previewSize.getHeight() + ", 适应模式");
+                            applyPhoneScaleTransform(textureView, previewSize, cameraKey);
+                            AppLog.d(TAG, "设置 " + cameraKey + " 手机缩放变换, 预览尺寸: " + previewSize.getWidth() + "x" + previewSize.getHeight());
+                        } else {
+                            // 其他车型：使用原始宽高比（1280x800，横向）
+                            textureView.setAspectRatio(previewSize.getWidth(), previewSize.getHeight());
+                            
+                            // 根据车型和摄像头数量决定显示模式
+                            // L7车型和1摄/2摄模式：使用适应模式，完整显示画面
+                            // E5的4摄模式：启用填满模式，避免黑边
+                            boolean useFillMode = configuredCameraCount >= 4 && !AppConfig.CAR_MODEL_L7.equals(carModel);
+                            
+                            if (useFillMode) {
+                                // 4摄模式（E5）：启用填满模式，避免黑边
+                                textureView.setFillContainer(true);
+                                AppLog.d(TAG, "设置 " + cameraKey + " 宽高比: " + previewSize.getWidth() + ":" + previewSize.getHeight() + ", 填满模式");
+                            } else {
+                                // L7车型或1摄/2摄模式：使用适应模式，完整显示画面
+                                textureView.setFillContainer(false);
+                                AppLog.d(TAG, "设置 " + cameraKey + " 宽高比: " + previewSize.getWidth() + ":" + previewSize.getHeight() + ", 适应模式");
+                            }
                         }
                     }
                 }
@@ -1029,6 +1046,52 @@ public class MainActivity extends AppCompatActivity {
      * @param rotation 旋转角度（90 或 270）
      * @param cameraKey 摄像头标识
      */
+    /**
+     * 应用手机缩放变换，保持摄像头预览的宽高比不被拉伸
+     */
+    private void applyPhoneScaleTransform(AutoFitTextureView textureView, android.util.Size previewSize, String cameraKey) {
+        textureView.post(() -> {
+            int viewWidth = textureView.getWidth();
+            int viewHeight = textureView.getHeight();
+
+            if (viewWidth == 0 || viewHeight == 0) {
+                AppLog.d(TAG, cameraKey + " TextureView 尺寸为0，延迟应用缩放");
+                textureView.postDelayed(() -> applyPhoneScaleTransform(textureView, previewSize, cameraKey), 100);
+                return;
+            }
+
+            int previewWidth = previewSize.getWidth();
+            int previewHeight = previewSize.getHeight();
+
+            android.graphics.Matrix matrix = new android.graphics.Matrix();
+
+            float centerX = viewWidth / 2f;
+            float centerY = viewHeight / 2f;
+
+            // 计算缩放比例，使用 FIT_CENTER 策略（保持比例，完整显示）
+            float scaleX = (float) viewWidth / previewWidth;
+            float scaleY = (float) viewHeight / previewHeight;
+            float scale = Math.min(scaleX, scaleY);  // 取较小值，确保完整显示
+
+            // 计算缩放后的尺寸
+            float scaledWidth = previewWidth * scale;
+            float scaledHeight = previewHeight * scale;
+
+            // 计算偏移量，使内容居中
+            float dx = (viewWidth - scaledWidth) / 2f;
+            float dy = (viewHeight - scaledHeight) / 2f;
+
+            // 设置变换矩阵：先缩放，再平移居中
+            matrix.setScale(scale, scale);
+            matrix.postTranslate(dx, dy);
+
+            textureView.setTransform(matrix);
+            AppLog.d(TAG, cameraKey + " 应用手机缩放变换: view=" + viewWidth + "x" + viewHeight + 
+                    ", preview=" + previewWidth + "x" + previewHeight + 
+                    ", scale=" + scale);
+        });
+    }
+
     private void applyRotationTransform(AutoFitTextureView textureView, android.util.Size previewSize,
                                         int rotation, String cameraKey) {
         // 延迟执行，确保 TextureView 已经完成布局
@@ -1730,5 +1793,5 @@ public class MainActivity extends AppCompatActivity {
             moveTaskToBack(true);
             AppLog.d(TAG, "Moved to background via back button");
         }
-    }
+     }
 }

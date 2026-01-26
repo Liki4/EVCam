@@ -184,6 +184,13 @@ public class SingleCamera {
     }
 
     /**
+     * 获取预览分辨率
+     */
+    public Size getPreviewSize() {
+        return previewSize;
+    }
+
+    /**
      * 设置录制Surface
      */
     public void setRecordSurface(Surface surface) {
@@ -656,7 +663,17 @@ public class SingleCamera {
             }
 
             // 创建预览请求
+            // 注意：必须每次都创建新的 Surface，因为旧的 Surface 可能已被释放
+            if (previewSurface != null) {
+                try {
+                    previewSurface.release();
+                } catch (Exception e) {
+                    AppLog.d(TAG, "Camera " + cameraId + " ignored exception while releasing old preview surface: " + e.getMessage());
+                }
+                previewSurface = null;
+            }
             Surface surface = new Surface(surfaceTexture);
+            previewSurface = surface;  // 缓存新的 Surface
             AppLog.d(TAG, "Camera " + cameraId + " Surface obtained: " + surface);
 
             AppLog.d(TAG, "Camera " + cameraId + " Creating capture request...");
@@ -677,11 +694,13 @@ public class SingleCamera {
                 
                 if (!isValid) {
                     AppLog.e(TAG, "Camera " + cameraId + " CRITICAL: recordSurface is INVALID! Recording will likely fail!");
+                    // 如果录制 Surface 无效，不添加到会话中，避免配置失败
+                    AppLog.w(TAG, "Camera " + cameraId + " Skipping invalid record surface to avoid session configuration failure");
+                } else {
+                    surfaces.add(recordSurface);
+                    previewRequestBuilder.addTarget(recordSurface);
+                    AppLog.d(TAG, "Added record surface to camera " + cameraId + " (isValid=" + isValid + ")");
                 }
-                
-                surfaces.add(recordSurface);
-                previewRequestBuilder.addTarget(recordSurface);
-                AppLog.d(TAG, "Added record surface to camera " + cameraId + " (isValid=" + isValid + ")");
             }
 
             // 不再在预览会话中添加ImageReader Surface
@@ -756,8 +775,30 @@ public class SingleCamera {
                 @Override
                 public void onConfigureFailed(@NonNull CameraCaptureSession session) {
                     AppLog.e(TAG, "Failed to configure camera " + cameraId + " session!");
-                    if (callback != null) {
-                        callback.onCameraError(cameraId, -3);
+                    AppLog.e(TAG, "Camera " + cameraId + " session configuration failed. This may indicate:");
+                    AppLog.e(TAG, "  1. Device does not support simultaneous preview and recording surfaces");
+                    AppLog.e(TAG, "  2. Resolution mismatch between preview (" + previewSize + ") and recording");
+                    AppLog.e(TAG, "  3. Device resource limitations");
+                    
+                    // 如果是因为录制 Surface 导致的失败，尝试只使用预览 Surface
+                    if (recordSurface != null) {
+                        AppLog.w(TAG, "Camera " + cameraId + " Retrying with preview-only session (without recording surface)");
+                        // 临时清除录制 Surface，重试创建预览会话
+                        Surface tempRecordSurface = recordSurface;
+                        recordSurface = null;
+                        // 延迟重试，避免立即操作
+                        if (backgroundHandler != null) {
+                            backgroundHandler.postDelayed(() -> {
+                                createCameraPreviewSession();
+                            }, 500);
+                        }
+                        // 恢复录制 Surface（但不在会话中使用）
+                        recordSurface = tempRecordSurface;
+                    } else {
+                        // 没有录制 Surface 也失败，这是严重问题
+                        if (callback != null) {
+                            callback.onCameraError(cameraId, -3);
+                        }
                     }
                 }
             }, backgroundHandler);
@@ -779,19 +820,22 @@ public class SingleCamera {
     public void recreateSession() {
         if (cameraDevice != null) {
             if (captureSession != null) {
-                captureSession.close();
+                try {
+                    captureSession.close();
+                } catch (Exception e) {
+                    AppLog.d(TAG, "Camera " + cameraId + " ignored exception while closing session: " + e.getMessage());
+                }
                 captureSession = null;
             }
-            // 清除旧的预览 Surface 缓存，强制重新创建
-            if (previewSurface != null) {
-                try {
-                    previewSurface.release();
-                } catch (Exception e) {
-                    AppLog.w(TAG, "Camera " + cameraId + " exception while releasing old preview surface: " + e.getMessage());
-                }
-                previewSurface = null;
+            // 注意：不在这里释放 previewSurface，因为 createCameraPreviewSession 会处理
+            // 延迟创建会话，确保之前的会话完全关闭
+            if (backgroundHandler != null) {
+                backgroundHandler.postDelayed(() -> {
+                    createCameraPreviewSession();
+                }, 100);
+            } else {
+                createCameraPreviewSession();
             }
-            createCameraPreviewSession();
         }
     }
 

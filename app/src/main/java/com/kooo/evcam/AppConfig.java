@@ -35,6 +35,7 @@ public class AppConfig {
     // 车型常量
     public static final String CAR_MODEL_GALAXY_E5 = "galaxy_e5";  // 银河E5
     public static final String CAR_MODEL_L7 = "galaxy_l7";  // 银河L6/L7
+    public static final String CAR_MODEL_PHONE = "phone";  // 手机
     public static final String CAR_MODEL_CUSTOM = "custom";  // 自定义车型
     
     private final SharedPreferences prefs;
