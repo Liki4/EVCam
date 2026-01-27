@@ -30,7 +30,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="分辨率设置"
+            android:text="画质设置"
             android:textColor="@color/text_primary"
             android:textSize="28sp"
             android:textStyle="bold" />
@@ -92,7 +92,7 @@
                     android:layout_marginTop="8dp" />
             </LinearLayout>
 
-            <!-- 当前使用的分辨率 -->
+            <!-- 码率选择 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -104,7 +104,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="当前实际分辨率"
+                    android:text="录制码率"
                     android:textColor="@color/text_primary"
                     android:textSize="20sp"
                     android:textStyle="bold" />
@@ -112,24 +112,114 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="各摄像头当前使用的分辨率（重启应用后更新）"
+                    android:text="码率越高画质越清晰，但文件体积越大"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="12dp" />
+
+                <Spinner
+                    android:id="@+id/spinner_bitrate"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@drawable/spinner_background"
+                    android:popupBackground="@color/card_background"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp" />
+
+                <TextView
+                    android:id="@+id/tv_bitrate_desc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="根据分辨率和帧率自动计算推荐码率"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+
+            <!-- 帧率选择 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:background="@color/card_background"
+                android:layout_marginBottom="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="录制帧率"
+                    android:textColor="@color/text_primary"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="帧率越高画面越流畅，但文件体积越大"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="12dp" />
+
+                <Spinner
+                    android:id="@+id/spinner_framerate"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@drawable/spinner_background"
+                    android:popupBackground="@color/card_background"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp" />
+
+                <TextView
+                    android:id="@+id/tv_framerate_desc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="标准: 30fps | 低: 15fps"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+
+            <!-- 当前参数信息 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:background="@color/card_background"
+                android:layout_marginBottom="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="当前录制参数"
+                    android:textColor="@color/text_primary"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="实际应用的分辨率、帧率、码率（重启应用后更新）"
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp"
                     android:layout_marginTop="4dp"
                     android:layout_marginBottom="12dp" />
 
                 <TextView
-                    android:id="@+id/tv_current_resolutions"
+                    android:id="@+id/tv_current_params"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="暂无数据"
+                    android:text="正在获取..."
                     android:textColor="@color/text_primary"
                     android:textSize="14sp"
                     android:fontFamily="monospace"
                     android:lineSpacingExtra="4dp" />
             </LinearLayout>
 
-            <!-- 摄像头支持的分辨率 -->
+            <!-- 摄像头硬件信息 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -141,7 +231,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="摄像头支持的分辨率"
+                    android:text="摄像头硬件信息"
                     android:textColor="@color/text_primary"
                     android:textSize="20sp"
                     android:textStyle="bold" />
@@ -149,14 +239,14 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="各摄像头支持的分辨率列表"
+                    android:text="各摄像头支持的帧率和分辨率"
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp"
                     android:layout_marginTop="4dp"
                     android:layout_marginBottom="12dp" />
 
                 <TextView
-                    android:id="@+id/tv_supported_resolutions"
+                    android:id="@+id/tv_hardware_info"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="正在检测..."

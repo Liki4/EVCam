@@ -536,10 +536,14 @@ public class MultiCameraManager {
             return false;
         }
 
-        // 获取分段时长配置
+        // 获取录制配置
         AppConfig appConfig = new AppConfig(context);
         long segmentDurationMs = appConfig.getSegmentDurationMs();
         AppLog.d(TAG, "Segment duration: " + (segmentDurationMs / 1000) + " seconds (" + appConfig.getSegmentDurationMinutes() + " minutes)");
+        
+        // 获取帧率配置（根据帧率等级设置计算）
+        int targetFrameRate = appConfig.getActualFrameRate(30);  // 假设硬件支持30fps
+        AppLog.d(TAG, "Target frame rate: " + targetFrameRate + " fps (level: " + appConfig.getFramerateLevel() + ")");
 
         // 第一步：准备所有 MediaRecorder（但不启动）
         // 使用每个摄像头的实际预览分辨率，而不是硬编码的值
@@ -558,8 +562,20 @@ public class MultiCameraManager {
                 previewSize = new Size(1280, 720);  // 回退到常见分辨率
             }
             
-            // 设置分段时长
+            // 计算码率（基于分辨率和帧率）
+            int bitrate = appConfig.getActualBitrate(
+                    previewSize.getWidth(), 
+                    previewSize.getHeight(), 
+                    targetFrameRate);
+            
+            // 设置录制参数
             recorder.setSegmentDuration(segmentDurationMs);
+            recorder.setVideoBitrate(bitrate);
+            recorder.setVideoFrameRate(targetFrameRate);
+            
+            AppLog.d(TAG, "Recording params for " + key + ": " + 
+                    previewSize.getWidth() + "x" + previewSize.getHeight() + 
+                    " @ " + targetFrameRate + "fps, " + AppConfig.formatBitrate(bitrate));
             
             // 所有摄像头使用统一的时间戳：日期_时间_摄像头位置.mp4
             String path = new File(saveDir, timestamp + "_" + key + ".mp4").getAbsolutePath();
@@ -691,10 +707,14 @@ public class MultiCameraManager {
             return false;
         }
 
-        // 获取分段时长配置
+        // 获取录制配置
         AppConfig appConfig = new AppConfig(context);
         long segmentDurationMs = appConfig.getSegmentDurationMs();
         AppLog.d(TAG, "Codec segment duration: " + (segmentDurationMs / 1000) + " seconds (" + appConfig.getSegmentDurationMinutes() + " minutes)");
+        
+        // 获取帧率配置（根据帧率等级设置计算）
+        int targetFrameRate = appConfig.getActualFrameRate(30);
+        AppLog.d(TAG, "Codec target frame rate: " + targetFrameRate + " fps (level: " + appConfig.getFramerateLevel() + ")");
 
         // 清理之前的软编码录制器
         for (CodecVideoRecorder recorder : codecRecorders.values()) {
@@ -716,6 +736,12 @@ public class MultiCameraManager {
                 AppLog.e(TAG, "Camera " + key + " preview size not available, using fallback 1280x800");
                 previewSize = new Size(1280, 800);
             }
+            
+            // 计算码率（基于分辨率和帧率）
+            int bitrate = appConfig.getActualBitrate(
+                    previewSize.getWidth(), 
+                    previewSize.getHeight(), 
+                    targetFrameRate);
 
             // 创建软编码录制器
             CodecVideoRecorder codecRecorder = new CodecVideoRecorder(
@@ -724,8 +750,14 @@ public class MultiCameraManager {
                     previewSize.getHeight()
             );
 
-            // 设置分段时长
+            // 设置录制参数
             codecRecorder.setSegmentDuration(segmentDurationMs);
+            codecRecorder.setBitRate(bitrate);
+            codecRecorder.setFrameRate(targetFrameRate);
+            
+            AppLog.d(TAG, "Codec recording params for " + key + ": " + 
+                    previewSize.getWidth() + "x" + previewSize.getHeight() + 
+                    " @ " + targetFrameRate + "fps, " + AppConfig.formatBitrate(bitrate));
 
             // 设置时间水印（从配置读取，使用方法开头已创建的 appConfig）
             codecRecorder.setWatermarkEnabled(appConfig.isTimestampWatermarkEnabled());

@@ -81,6 +81,21 @@ public class AppConfig {
     // 分辨率常量
     public static final String RESOLUTION_DEFAULT = "default";  // 默认（优先1280x800）
     
+    // 码率配置相关键名
+    private static final String KEY_BITRATE_LEVEL = "bitrate_level";  // 码率等级
+    
+    // 码率等级常量
+    public static final String BITRATE_LOW = "low";        // 低码率（计算值的50%）
+    public static final String BITRATE_MEDIUM = "medium";  // 中码率（计算值，默认）
+    public static final String BITRATE_HIGH = "high";      // 高码率（计算值的150%）
+    
+    // 帧率配置相关键名
+    private static final String KEY_FRAMERATE_LEVEL = "framerate_level";  // 帧率等级
+    
+    // 帧率等级常量
+    public static final String FRAMERATE_STANDARD = "standard";  // 标准帧率（默认）
+    public static final String FRAMERATE_LOW = "low";            // 低帧率（标准值的一半）
+    
     // 车型配置相关键名
     private static final String KEY_CAR_MODEL = "car_model";  // 车型（galaxy_e5 / custom）
     private static final String KEY_CAMERA_COUNT = "camera_count";  // 摄像头数量（4/2/1）
@@ -293,6 +308,181 @@ public class AppConfig {
             AppLog.w(TAG, "无法解析分辨率: " + resolution);
         }
         return null;
+    }
+    
+    // ==================== 码率配置相关方法 ====================
+    
+    /**
+     * 设置码率等级
+     * @param level 码率等级（low/medium/high）
+     */
+    public void setBitrateLevel(String level) {
+        prefs.edit().putString(KEY_BITRATE_LEVEL, level).apply();
+        AppLog.d(TAG, "码率等级设置: " + level);
+    }
+    
+    /**
+     * 获取码率等级
+     * @return 码率等级，默认为 medium
+     */
+    public String getBitrateLevel() {
+        return prefs.getString(KEY_BITRATE_LEVEL, BITRATE_MEDIUM);
+    }
+    
+    /**
+     * 根据分辨率和帧率计算码率（bps）
+     * 公式：像素数 × 帧率 × 0.1
+     * @param width 宽度
+     * @param height 高度
+     * @param frameRate 帧率
+     * @return 计算出的码率（bps）
+     */
+    public static int calculateBitrate(int width, int height, int frameRate) {
+        // 像素数 × 帧率 × 0.1
+        long bitrate = (long) width * height * frameRate / 10;
+        return (int) bitrate;
+    }
+    
+    /**
+     * 根据当前配置获取实际应用的码率（bps）
+     * @param width 宽度
+     * @param height 高度
+     * @param frameRate 帧率
+     * @return 实际码率（bps）
+     */
+    public int getActualBitrate(int width, int height, int frameRate) {
+        int baseBitrate = calculateBitrate(width, height, frameRate);
+        String level = getBitrateLevel();
+        
+        switch (level) {
+            case BITRATE_LOW:
+                // 50%，取整到 0.5Mbps
+                return roundToHalfMbps(baseBitrate / 2);
+            case BITRATE_HIGH:
+                // 150%，取整到 0.5Mbps
+                return roundToHalfMbps(baseBitrate * 3 / 2);
+            case BITRATE_MEDIUM:
+            default:
+                // 100%，取整到 0.5Mbps
+                return roundToHalfMbps(baseBitrate);
+        }
+    }
+    
+    /**
+     * 将码率四舍五入到最接近的 0.5Mbps
+     * @param bitrate 原始码率（bps）
+     * @return 四舍五入后的码率（bps）
+     */
+    private static int roundToHalfMbps(int bitrate) {
+        // 转换为 0.5Mbps 的倍数
+        int halfMbps = 500000;
+        int rounded = ((bitrate + halfMbps / 2) / halfMbps) * halfMbps;
+        // 最小 0.5Mbps，最大 20Mbps
+        return Math.max(halfMbps, Math.min(rounded, 20000000));
+    }
+    
+    /**
+     * 获取码率等级的显示名称
+     */
+    public static String getBitrateLevelDisplayName(String level) {
+        switch (level) {
+            case BITRATE_LOW:
+                return "低";
+            case BITRATE_HIGH:
+                return "高";
+            case BITRATE_MEDIUM:
+            default:
+                return "标准";
+        }
+    }
+    
+    /**
+     * 格式化码率为可读字符串
+     * @param bitrate 码率（bps）
+     * @return 格式化字符串，如 "3.0 Mbps"
+     */
+    public static String formatBitrate(int bitrate) {
+        float mbps = bitrate / 1000000f;
+        if (mbps >= 1) {
+            return String.format(java.util.Locale.getDefault(), "%.1f Mbps", mbps);
+        } else {
+            return String.format(java.util.Locale.getDefault(), "%d Kbps", bitrate / 1000);
+        }
+    }
+    
+    /**
+     * 根据硬件最大帧率计算标准帧率（接近30fps的成倍降低值）
+     * @param hardwareMaxFps 硬件支持的最大帧率
+     * @return 标准帧率
+     */
+    public static int getStandardFrameRate(int hardwareMaxFps) {
+        if (hardwareMaxFps <= 0) {
+            return 30;  // 默认30fps
+        }
+        
+        // 如果硬件帧率本身就是30或接近30，直接使用
+        if (hardwareMaxFps >= 25 && hardwareMaxFps <= 35) {
+            return hardwareMaxFps;
+        }
+        
+        // 如果超过30，降到30或以下的整数倍
+        if (hardwareMaxFps > 35) {
+            // 60fps -> 30fps, 120fps -> 30fps
+            int divisor = (hardwareMaxFps + 29) / 30;  // 向上取整
+            int result = hardwareMaxFps / divisor;
+            // 确保结果在合理范围内
+            return Math.max(15, Math.min(result, 30));
+        }
+        
+        // 如果低于25，直接使用硬件帧率
+        return hardwareMaxFps;
+    }
+    
+    // ==================== 帧率配置相关方法 ====================
+    
+    /**
+     * 设置帧率等级
+     * @param level 帧率等级（standard/low）
+     */
+    public void setFramerateLevel(String level) {
+        prefs.edit().putString(KEY_FRAMERATE_LEVEL, level).apply();
+        AppLog.d(TAG, "帧率等级设置: " + level);
+    }
+    
+    /**
+     * 获取帧率等级
+     * @return 帧率等级，默认为 standard
+     */
+    public String getFramerateLevel() {
+        return prefs.getString(KEY_FRAMERATE_LEVEL, FRAMERATE_STANDARD);
+    }
+    
+    /**
+     * 根据配置的帧率等级获取实际帧率
+     * @param hardwareMaxFps 硬件支持的最大帧率
+     * @return 实际使用的帧率
+     */
+    public int getActualFrameRate(int hardwareMaxFps) {
+        int standardFps = getStandardFrameRate(hardwareMaxFps);
+        String level = getFramerateLevel();
+        
+        if (FRAMERATE_LOW.equals(level)) {
+            // 低帧率：标准值除以2，最低10fps
+            return Math.max(10, standardFps / 2);
+        }
+        
+        // 标准帧率
+        return standardFps;
+    }
+    
+    /**
+     * 获取帧率等级的显示名称
+     */
+    public static String getFramerateLevelDisplayName(String level) {
+        if (FRAMERATE_LOW.equals(level)) {
+            return "低";
+        }
+        return "标准";
     }
     
     // ==================== 车型配置相关方法 ====================

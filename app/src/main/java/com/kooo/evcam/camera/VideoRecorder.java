@@ -25,6 +25,10 @@ public class VideoRecorder {
     private boolean isRecording = false;
     private boolean waitingForSessionReconfiguration = false;  // 等待会话重新配置
     private String currentFilePath;
+    
+    // 录制参数（可配置）
+    private int videoBitrate = 3000000;  // 默认 3Mbps
+    private int videoFrameRate = 30;     // 默认 30fps
 
     // 分段录制相关
     private long segmentDurationMs = 60000;  // 分段时长，默认1分钟，可通过 setSegmentDuration 配置
@@ -55,6 +59,38 @@ public class VideoRecorder {
     public void setSegmentDuration(long durationMs) {
         this.segmentDurationMs = durationMs;
         AppLog.d(TAG, "Camera " + cameraId + " segment duration set to " + (durationMs / 1000) + " seconds");
+    }
+
+    /**
+     * 设置录制码率
+     * @param bitrate 码率（bps）
+     */
+    public void setVideoBitrate(int bitrate) {
+        this.videoBitrate = bitrate;
+        AppLog.d(TAG, "Camera " + cameraId + " bitrate set to " + (bitrate / 1000) + " Kbps");
+    }
+
+    /**
+     * 设置录制帧率
+     * @param frameRate 帧率（fps）
+     */
+    public void setVideoFrameRate(int frameRate) {
+        this.videoFrameRate = frameRate;
+        AppLog.d(TAG, "Camera " + cameraId + " frame rate set to " + frameRate + " fps");
+    }
+
+    /**
+     * 获取当前配置的码率
+     */
+    public int getVideoBitrate() {
+        return videoBitrate;
+    }
+
+    /**
+     * 获取当前配置的帧率
+     */
+    public int getVideoFrameRate() {
+        return videoFrameRate;
     }
 
     /**
@@ -156,11 +192,14 @@ public class VideoRecorder {
         mediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
         mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
         mediaRecorder.setOutputFile(filePath);
-        mediaRecorder.setVideoEncodingBitRate(1000000); // 降低到1Mbps以减少资源消耗
-        mediaRecorder.setVideoFrameRate(30);
+        mediaRecorder.setVideoEncodingBitRate(videoBitrate);
+        mediaRecorder.setVideoFrameRate(videoFrameRate);
         mediaRecorder.setVideoSize(width, height);
         mediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
         mediaRecorder.prepare();
+        
+        AppLog.d(TAG, "Camera " + cameraId + " MediaRecorder configured: " + width + "x" + height + 
+                " @ " + videoFrameRate + "fps, " + (videoBitrate / 1000) + " Kbps");
         
         // 准备后立即缓存 Surface，确保整个录制周期使用同一个对象
         // 这对于某些车机平台很重要，因为 Camera2 API 可能无法识别不同的 Surface 包装对象

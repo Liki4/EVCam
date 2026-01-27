@@ -31,11 +31,13 @@ import java.util.Locale;
 public class CodecVideoRecorder {
     private static final String TAG = "CodecVideoRecorder";
 
-    // 编码参数
+    // 编码参数（常量）
     private static final String MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_AVC;  // H.264
-    private static final int FRAME_RATE = 25;  // 与车机实际帧率接近
     private static final int I_FRAME_INTERVAL = 1;  // I帧间隔（秒）
-    private static final int BIT_RATE = 2000000;  // 2Mbps
+    
+    // 编码参数（可配置）
+    private int frameRate = 30;       // 默认 30fps
+    private int bitRate = 3000000;    // 默认 3Mbps
 
     private final String cameraId;
     private final int width;
@@ -146,6 +148,38 @@ public class CodecVideoRecorder {
      */
     public long getSegmentDuration() {
         return segmentDurationMs;
+    }
+
+    /**
+     * 设置录制码率
+     * @param bitrate 码率（bps）
+     */
+    public void setBitRate(int bitrate) {
+        this.bitRate = bitrate;
+        AppLog.d(TAG, "Camera " + cameraId + " bitrate set to " + (bitrate / 1000) + " Kbps");
+    }
+
+    /**
+     * 设置录制帧率
+     * @param fps 帧率（fps）
+     */
+    public void setFrameRate(int fps) {
+        this.frameRate = fps;
+        AppLog.d(TAG, "Camera " + cameraId + " frame rate set to " + fps + " fps");
+    }
+
+    /**
+     * 获取当前配置的码率
+     */
+    public int getBitRate() {
+        return bitRate;
+    }
+
+    /**
+     * 获取当前配置的帧率
+     */
+    public int getFrameRate() {
+        return frameRate;
     }
 
     /**
@@ -513,8 +547,8 @@ public class CodecVideoRecorder {
     private void createEncoder() throws IOException {
         MediaFormat format = MediaFormat.createVideoFormat(MIME_TYPE, width, height);
         format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-        format.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE);
-        format.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
+        format.setInteger(MediaFormat.KEY_BIT_RATE, bitRate);
+        format.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate);
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL);
 
         encoder = MediaCodec.createEncoderByType(MIME_TYPE);
@@ -525,7 +559,8 @@ public class CodecVideoRecorder {
 
         bufferInfo = new MediaCodec.BufferInfo();
 
-        AppLog.d(TAG, "Camera " + cameraId + " Encoder created: " + width + "x" + height + " @ " + BIT_RATE + "bps");
+        AppLog.d(TAG, "Camera " + cameraId + " Encoder created: " + width + "x" + height + 
+                " @ " + frameRate + "fps, " + (bitRate / 1000) + " Kbps");
     }
 
     /**
