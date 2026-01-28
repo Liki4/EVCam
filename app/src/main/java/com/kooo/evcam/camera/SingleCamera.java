@@ -865,17 +865,18 @@ public class SingleCamera {
                     // 如果是因为录制 Surface 导致的失败，尝试只使用预览 Surface
                     if (recordSurface != null) {
                         AppLog.w(TAG, "Camera " + cameraId + " Retrying with preview-only session (without recording surface)");
-                        // 临时清除录制 Surface，重试创建预览会话
-                        Surface tempRecordSurface = recordSurface;
+                        // 清除录制 Surface，让重试时只使用预览 Surface
+                        // 注意：不恢复 recordSurface，让上层（MultiCameraManager）重新管理录制状态
                         recordSurface = null;
                         // 延迟重试，避免立即操作
                         if (backgroundHandler != null) {
                             backgroundHandler.postDelayed(() -> {
-                                createCameraPreviewSession();
+                                if (cameraDevice != null) {
+                                    AppLog.d(TAG, "Camera " + cameraId + " retrying session with preview-only");
+                                    createCameraPreviewSession();
+                                }
                             }, 500);
                         }
-                        // 恢复录制 Surface（但不在会话中使用）
-                        recordSurface = tempRecordSurface;
                     } else {
                         // 没有录制 Surface 也失败，这是严重问题
                         if (callback != null) {
