@@ -1962,6 +1962,11 @@ public class MainActivity extends AppCompatActivity {
                 // 发送录制状态广播（通知悬浮窗）
                 FloatingWindowService.sendRecordingStateChanged(this, true);
 
+                // L7-多按钮布局：更新录制按钮文字为"停止"
+                if (AppConfig.CAR_MODEL_L7_MULTI.equals(appConfig.getCarModel()) && btnStartRecord != null) {
+                    btnStartRecord.setText("停止");
+                }
+
                 // 显示提示：优先显示回退提示（每次冷启动只显示一次）
                 if (isFallback && !AppConfig.isSdFallbackShownThisSession()) {
                     AppConfig.setSdFallbackShownThisSession(true);
@@ -1996,6 +2001,11 @@ public class MainActivity extends AppCompatActivity {
 
             // 发送录制状态广播（通知悬浮窗）
             FloatingWindowService.sendRecordingStateChanged(this, false);
+
+            // L7-多按钮布局：恢复录制按钮文字为"录像"
+            if (AppConfig.CAR_MODEL_L7_MULTI.equals(appConfig.getCarModel()) && btnStartRecord != null) {
+                btnStartRecord.setText("录像");
+            }
 
             Toast.makeText(this, "录制已停止", Toast.LENGTH_SHORT).show();
             AppLog.d(TAG, "Recording stopped, foreground service stopped");

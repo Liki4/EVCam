@@ -1002,6 +1002,13 @@ public class SingleCamera {
             photoDir.mkdirs();
         }
 
+        // 检查存储空间是否充足（至少需要 5MB）
+        long availableSpace = StorageHelper.getAvailableSpace(photoDir);
+        if (availableSpace >= 0 && availableSpace < 5 * 1024 * 1024) {
+            AppLog.w(TAG, "Camera " + cameraId + " 存储空间不足，剩余: " + StorageHelper.formatSize(availableSpace));
+            // 仍然尝试保存，因为照片通常只有几百KB
+        }
+
         // 使用传入的时间戳命名：yyyyMMdd_HHmmss_摄像头位置.jpg
         String position = (cameraPosition != null) ? cameraPosition : cameraId;
         File photoFile = new File(photoDir, timestamp + "_" + position + ".jpg");
@@ -1018,15 +1025,25 @@ public class SingleCamera {
             output = new FileOutputStream(photoFile);
             finalBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, output);
             output.flush();
-            AppLog.d(TAG, "Photo saved: " + photoFile.getAbsolutePath());
+            AppLog.i(TAG, "Photo saved: " + photoFile.getAbsolutePath());
         } catch (IOException e) {
-            AppLog.e(TAG, "Failed to save photo", e);
+            if (e.getMessage() != null && e.getMessage().contains("ENOSPC")) {
+                AppLog.e(TAG, "Camera " + cameraId + " 保存照片失败：存储空间已满");
+            } else {
+                AppLog.e(TAG, "Failed to save photo", e);
+            }
         } finally {
             if (output != null) {
                 try {
                     output.close();
                 } catch (IOException e) {
-                    AppLog.e(TAG, "Failed to close output stream", e);
+                    // 关闭流时的 ENOSPC 错误通常表示文件已保存，但空间紧张
+                    // 降低日志级别，避免误导用户以为保存失败
+                    if (e.getMessage() != null && e.getMessage().contains("ENOSPC")) {
+                        AppLog.w(TAG, "Camera " + cameraId + " 存储空间已满，请清理存储");
+                    } else {
+                        AppLog.e(TAG, "Failed to close output stream", e);
+                    }
                 }
             }
             // 如果创建了新的bitmap用于水印，需要回收
