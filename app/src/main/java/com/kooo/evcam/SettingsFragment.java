@@ -907,7 +907,7 @@ public class SettingsFragment extends Fragment {
                     modeName = "自动";
                     // 显示当前实际使用的模式
                     String actualMode = appConfig.shouldUseCodecRecording() ? "MediaCodec" : "MediaRecorder";
-                    modeDesc = "当前自动选择：" + actualMode;
+                    modeDesc = "根据车型自动选择最佳模式\n当前自动选择：" + actualMode;
                 } else if (position == 1) {
                     newMode = AppConfig.RECORDING_MODE_MEDIA_RECORDER;
                     modeName = "MediaRecorder";
