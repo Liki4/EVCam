@@ -10,6 +10,9 @@ import com.kooo.evcam.dingtalk.DingTalkStreamManager;
 import com.kooo.evcam.telegram.TelegramApiClient;
 import com.kooo.evcam.telegram.TelegramBotManager;
 import com.kooo.evcam.telegram.TelegramConfig;
+import com.kooo.evcam.feishu.FeishuApiClient;
+import com.kooo.evcam.feishu.FeishuBotManager;
+import com.kooo.evcam.feishu.FeishuConfig;
 
 /**
  * 远程服务管理器（单例）
@@ -42,12 +45,18 @@ public class RemoteServiceManager {
     // Telegram 服务（强引用，避免被 GC）
     private TelegramBotManager telegramBotManager;
     private TelegramApiClient telegramApiClient;
+
+    // 飞书服务（强引用，避免被 GC）
+    private FeishuBotManager feishuBotManager;
+    private FeishuApiClient feishuApiClient;
     
     // 启动锁，防止竞态条件
     private volatile boolean isDingTalkStarting = false;
     private volatile boolean isTelegramStarting = false;
+    private volatile boolean isFeishuStarting = false;
     private final Object dingTalkLock = new Object();
     private final Object telegramLock = new Object();
+    private final Object feishuLock = new Object();
     
     // 状态信息提供者（当 MainActivity 启动后会注册，使用弱引用避免内存泄漏）
     private WeakReference<StatusInfoProvider> statusInfoProviderRef;
@@ -194,13 +203,51 @@ public class RemoteServiceManager {
         AppLog.d(TAG, "Telegram service cleared");
     }
 
+    // ==================== 飞书服务管理 ====================
+
+    public void setFeishuService(FeishuBotManager manager, FeishuApiClient apiClient) {
+        this.feishuBotManager = manager;
+        this.feishuApiClient = apiClient;
+        AppLog.d(TAG, "Feishu service registered");
+    }
+
+    public FeishuBotManager getFeishuBotManager() {
+        return feishuBotManager;
+    }
+
+    public FeishuApiClient getFeishuApiClient() {
+        return feishuApiClient;
+    }
+
+    public boolean isFeishuRunning() {
+        return feishuBotManager != null && feishuBotManager.isRunning();
+    }
+
+    /**
+     * 检查飞书服务是否正在启动或已在运行
+     */
+    public boolean isFeishuStartingOrRunning() {
+        synchronized (feishuLock) {
+            return isFeishuRunning() || isFeishuStarting;
+        }
+    }
+
+    public void clearFeishuService() {
+        if (feishuBotManager != null) {
+            feishuBotManager.stop();
+        }
+        this.feishuBotManager = null;
+        this.feishuApiClient = null;
+        AppLog.d(TAG, "Feishu service cleared");
+    }
+
     // ==================== 通用方法 ====================
 
     /**
      * 检查是否有任何远程服务在运行
      */
     public boolean hasAnyServiceRunning() {
-        return isDingTalkRunning() || isTelegramRunning();
+        return isDingTalkRunning() || isTelegramRunning() || isFeishuRunning();
     }
 
     /**
@@ -210,6 +257,7 @@ public class RemoteServiceManager {
         AppLog.d(TAG, "Stopping all remote services");
         clearDingTalkService();
         clearTelegramService();
+        clearFeishuService();
     }
 
     /**
@@ -225,6 +273,12 @@ public class RemoteServiceManager {
                 sb.append(" / ");
             }
             sb.append("Telegram 远程服务运行中");
+        }
+        if (isFeishuRunning()) {
+            if (sb.length() > 0) {
+                sb.append(" / ");
+            }
+            sb.append("飞书远程服务运行中");
         }
         if (sb.length() == 0) {
             sb.append("远程服务运行中");
@@ -255,6 +309,12 @@ public class RemoteServiceManager {
         TelegramConfig telegramConfig = new TelegramConfig(appContext);
         if (telegramConfig.isConfigured() && telegramConfig.isAutoStart() && !isTelegramRunning()) {
             startTelegramFromService(appContext, telegramConfig);
+        }
+
+        // 启动飞书服务
+        FeishuConfig feishuConfig = new FeishuConfig(appContext);
+        if (feishuConfig.isConfigured() && feishuConfig.isAutoStart() && !isFeishuRunning()) {
+            startFeishuFromService(appContext, feishuConfig);
         }
     }
 
@@ -345,7 +405,9 @@ public class RemoteServiceManager {
         } catch (Exception e) {
             AppLog.e(TAG, "从 Service 启动钉钉服务失败", e);
         } finally {
-            isDingTalkStarting = false;
+            synchronized (dingTalkLock) {
+                isDingTalkStarting = false;
+            }
         }
     }
 
@@ -434,7 +496,99 @@ public class RemoteServiceManager {
         } catch (Exception e) {
             AppLog.e(TAG, "从 Service 启动 Telegram 服务失败", e);
         } finally {
-            isTelegramStarting = false;
+            synchronized (telegramLock) {
+                isTelegramStarting = false;
+            }
+        }
+    }
+
+    /**
+     * 从 Service 启动飞书服务
+     */
+    private void startFeishuFromService(Context context, FeishuConfig config) {
+        // 防止竞态条件：加锁检查
+        synchronized (feishuLock) {
+            if (isFeishuRunning() || isFeishuStarting) {
+                AppLog.d(TAG, "飞书服务已在运行或正在启动，跳过");
+                return;
+            }
+            isFeishuStarting = true;
+        }
+
+        AppLog.d(TAG, "从 Service 启动飞书服务...");
+
+        try {
+            FeishuApiClient apiClient = new FeishuApiClient(config);
+
+            FeishuBotManager.ConnectionCallback connectionCallback = new FeishuBotManager.ConnectionCallback() {
+                @Override
+                public void onConnected() {
+                    AppLog.d(TAG, "飞书服务已连接（从 Service 启动）");
+                }
+
+                @Override
+                public void onDisconnected() {
+                    AppLog.d(TAG, "飞书服务已断开（从 Service 启动）");
+                }
+
+                @Override
+                public void onError(String error) {
+                    AppLog.e(TAG, "飞书服务错误（从 Service 启动）: " + error);
+                }
+            };
+
+            // 简化的命令回调
+            FeishuBotManager.CommandCallback commandCallback = new FeishuBotManager.CommandCallback() {
+                @Override
+                public void onRecordCommand(String chatId, String messageId, int durationSeconds) {
+                    WakeUpHelper.launchForRecordingFeishu(context, chatId, messageId, durationSeconds);
+                }
+
+                @Override
+                public void onPhotoCommand(String chatId, String messageId) {
+                    WakeUpHelper.launchForPhotoFeishu(context, chatId, messageId);
+                }
+
+                @Override
+                public String getStatusInfo() {
+                    return RemoteServiceManager.this.getStatusInfo(context);
+                }
+
+                @Override
+                public String onStartRecordingCommand() {
+                    WakeUpHelper.launchForStartRecording(context);
+                    return "✅ 正在启动录制...";
+                }
+
+                @Override
+                public String onStopRecordingCommand() {
+                    WakeUpHelper.launchForStopRecording(context);
+                    return "✅ 正在停止录制...";
+                }
+
+                @Override
+                public String onExitCommand(boolean confirmed) {
+                    if (confirmed) {
+                        stopAllServices();
+                        return "✅ EVCam 已退出";
+                    }
+                    return "⚠️ 发送「确认退出」执行退出操作";
+                }
+            };
+
+            FeishuBotManager botManager = new FeishuBotManager(context, config, apiClient, connectionCallback);
+            botManager.start(commandCallback);
+
+            // 注册到管理器
+            setFeishuService(botManager, apiClient);
+            AppLog.d(TAG, "飞书服务启动成功（从 Service）");
+
+        } catch (Exception e) {
+            AppLog.e(TAG, "从 Service 启动飞书服务失败", e);
+        } finally {
+            synchronized (feishuLock) {
+                isFeishuStarting = false;
+            }
         }
     }
 
@@ -444,7 +598,7 @@ public class RemoteServiceManager {
     private String buildBasicStatusInfo(Context context) {
         StringBuilder sb = new StringBuilder();
         sb.append("📊 EVCam 状态\n");
-        sb.append("━━━━━━━━━━━━━━━━\n");
+        sb.append("━━━━━━━━━━━━━━\n");
 
         try {
             AppConfig appConfig = new AppConfig(context);
@@ -453,6 +607,7 @@ public class RemoteServiceManager {
             sb.append("🌐 远程服务:\n");
             sb.append("• 钉钉: ").append(isDingTalkRunning() ? "已连接" : "未连接").append("\n");
             sb.append("• Telegram: ").append(isTelegramRunning() ? "已连接" : "未连接").append("\n");
+            sb.append("• 飞书: ").append(isFeishuRunning() ? "已连接" : "未连接").append("\n");
 
             // 存储信息
             try {
@@ -470,7 +625,7 @@ public class RemoteServiceManager {
                 // 忽略
             }
 
-            sb.append("━━━━━━━━━━━━━━━━\n");
+            sb.append("━━━━━━━━━━━━━━\n");
             sb.append("💡 发送指令可远程控制录制/拍照");
 
         } catch (Exception e) {

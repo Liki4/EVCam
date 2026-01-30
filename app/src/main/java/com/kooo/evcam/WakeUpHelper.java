@@ -325,4 +325,62 @@ public class WakeUpHelper {
         context.startActivity(intent);
         AppLog.d(TAG, "MainActivity launch intent sent for Telegram photo");
     }
+
+    // ==================== 飞书相关方法 ====================
+
+    /**
+     * 启动 MainActivity 执行飞书录制命令
+     * @param context 上下文
+     * @param chatId 飞书会话 ID
+     * @param messageId 消息 ID（用于回复）
+     * @param durationSeconds 录制时长
+     */
+    public static void launchForRecordingFeishu(Context context, String chatId, String messageId, int durationSeconds) {
+        AppLog.d(TAG, "Launching MainActivity for Feishu recording: chatId=" + chatId + ", duration=" + durationSeconds);
+
+        // 获取CPU唤醒锁
+        acquireCpuWakeLock(context);
+
+        Intent intent = new Intent(context, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
+                Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                Intent.FLAG_ACTIVITY_SINGLE_TOP);
+
+        // 传递飞书命令参数
+        intent.putExtra("remote_action", "record");
+        intent.putExtra("remote_source", "feishu");
+        intent.putExtra("feishu_chat_id", chatId);
+        intent.putExtra("feishu_message_id", messageId);
+        intent.putExtra("remote_duration", durationSeconds);
+
+        context.startActivity(intent);
+        AppLog.d(TAG, "MainActivity launch intent sent for Feishu recording");
+    }
+
+    /**
+     * 启动 MainActivity 执行飞书拍照命令
+     * @param context 上下文
+     * @param chatId 飞书会话 ID
+     * @param messageId 消息 ID（用于回复）
+     */
+    public static void launchForPhotoFeishu(Context context, String chatId, String messageId) {
+        AppLog.d(TAG, "Launching MainActivity for Feishu photo: chatId=" + chatId);
+
+        // 获取CPU唤醒锁
+        acquireCpuWakeLock(context);
+
+        Intent intent = new Intent(context, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
+                Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                Intent.FLAG_ACTIVITY_SINGLE_TOP);
+
+        // 传递飞书命令参数
+        intent.putExtra("remote_action", "photo");
+        intent.putExtra("remote_source", "feishu");
+        intent.putExtra("feishu_chat_id", chatId);
+        intent.putExtra("feishu_message_id", messageId);
+
+        context.startActivity(intent);
+        AppLog.d(TAG, "MainActivity launch intent sent for Feishu photo");
+    }
 }

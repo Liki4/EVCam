@@ -19,27 +19,27 @@ import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 
-import com.kooo.evcam.telegram.TelegramConfig;
+import com.kooo.evcam.feishu.FeishuConfig;
 
 /**
- * Telegram Bot 配置界面
+ * 飞书 Bot 配置界面
  */
-public class TelegramFragment extends Fragment {
-    private static final String TAG = "TelegramFragment";
+public class FeishuFragment extends Fragment {
+    private static final String TAG = "FeishuFragment";
 
-    private EditText etBotToken, etAllowedChatIds, etApiHost;
+    private EditText etAppId, etAppSecret, etAllowedUserIds;
     private Button btnSaveConfig, btnStartService, btnStopService, btnMenu, btnHome;
-    private ImageButton btnToggleTokenVisibility;
+    private ImageButton btnToggleSecretVisibility;
     private TextView tvConnectionStatus, tvHelpText;
     private SwitchCompat switchAutoStart;
-    private boolean isTokenVisible = false;
+    private boolean isSecretVisible = false;
 
-    private TelegramConfig config;
+    private FeishuConfig config;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        return inflater.inflate(R.layout.fragment_telegram, container, false);
+        return inflater.inflate(R.layout.fragment_feishu, container, false);
     }
 
     @Override
@@ -53,26 +53,25 @@ public class TelegramFragment extends Fragment {
     private void initViews(View view) {
         btnMenu = view.findViewById(R.id.btn_menu);
         btnHome = view.findViewById(R.id.btn_home);
-        btnToggleTokenVisibility = view.findViewById(R.id.btn_toggle_token_visibility);
-        etBotToken = view.findViewById(R.id.et_bot_token);
-        etAllowedChatIds = view.findViewById(R.id.et_allowed_chat_ids);
-        etApiHost = view.findViewById(R.id.et_api_host);
+        btnToggleSecretVisibility = view.findViewById(R.id.btn_toggle_secret_visibility);
+        etAppId = view.findViewById(R.id.et_app_id);
+        etAppSecret = view.findViewById(R.id.et_app_secret);
+        etAllowedUserIds = view.findViewById(R.id.et_allowed_user_ids);
         btnSaveConfig = view.findViewById(R.id.btn_save_config);
         btnStartService = view.findViewById(R.id.btn_start_service);
         btnStopService = view.findViewById(R.id.btn_stop_service);
         tvConnectionStatus = view.findViewById(R.id.tv_connection_status);
         tvHelpText = view.findViewById(R.id.tv_help_text);
         switchAutoStart = view.findViewById(R.id.switch_auto_start);
-        config = new TelegramConfig(requireContext());
+        config = new FeishuConfig(requireContext());
     }
 
     private void loadConfig() {
         if (config.isConfigured()) {
-            etBotToken.setText(config.getBotToken());
-            etAllowedChatIds.setText(config.getAllowedChatIds());
+            etAppId.setText(config.getAppId());
+            etAppSecret.setText(config.getAppSecret());
+            etAllowedUserIds.setText(config.getAllowedUserIds());
         }
-        // 加载 API Host（使用原始配置值，未配置时显示空）
-        etApiHost.setText(config.getRawBotApiHost());
         switchAutoStart.setChecked(config.isAutoStart());
     }
 
@@ -99,17 +98,17 @@ public class TelegramFragment extends Fragment {
         });
 
         // 密码可见性切换
-        btnToggleTokenVisibility.setOnClickListener(v -> {
-            isTokenVisible = !isTokenVisible;
-            if (isTokenVisible) {
-                etBotToken.setTransformationMethod(HideReturnsTransformationMethod.getInstance());
-                btnToggleTokenVisibility.setImageResource(R.drawable.ic_visibility_off);
+        btnToggleSecretVisibility.setOnClickListener(v -> {
+            isSecretVisible = !isSecretVisible;
+            if (isSecretVisible) {
+                etAppSecret.setTransformationMethod(HideReturnsTransformationMethod.getInstance());
+                btnToggleSecretVisibility.setImageResource(R.drawable.ic_visibility_off);
             } else {
-                etBotToken.setTransformationMethod(PasswordTransformationMethod.getInstance());
-                btnToggleTokenVisibility.setImageResource(R.drawable.ic_visibility);
+                etAppSecret.setTransformationMethod(PasswordTransformationMethod.getInstance());
+                btnToggleSecretVisibility.setImageResource(R.drawable.ic_visibility);
             }
             // 保持光标在末尾
-            etBotToken.setSelection(etBotToken.getText().length());
+            etAppSecret.setSelection(etAppSecret.getText().length());
         });
 
         btnSaveConfig.setOnClickListener(v -> saveConfig());
@@ -125,23 +124,21 @@ public class TelegramFragment extends Fragment {
     }
 
     private void saveConfig() {
-        String botToken = etBotToken.getText().toString().trim();
-        String allowedChatIds = etAllowedChatIds.getText().toString().trim();
-        String apiHost = etApiHost.getText().toString().trim();
+        String appId = etAppId.getText().toString().trim();
+        String appSecret = etAppSecret.getText().toString().trim();
+        String allowedUserIds = etAllowedUserIds.getText().toString().trim();
 
-        if (botToken.isEmpty()) {
-            Toast.makeText(requireContext(), "请填写 Bot Token", Toast.LENGTH_SHORT).show();
+        if (appId.isEmpty()) {
+            Toast.makeText(requireContext(), "请填写 App ID", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // 验证 API Host 格式（必须带协议头）
-        if (!TelegramConfig.isValidApiHost(apiHost)) {
-            Toast.makeText(requireContext(), "API 地址格式错误，必须以 http:// 或 https:// 开头", Toast.LENGTH_LONG).show();
+        if (appSecret.isEmpty()) {
+            Toast.makeText(requireContext(), "请填写 App Secret", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        config.saveConfig(botToken, allowedChatIds);
-        config.saveBotApiHost(apiHost);
+        config.saveConfig(appId, appSecret, allowedUserIds);
         Toast.makeText(requireContext(), "配置已保存", Toast.LENGTH_SHORT).show();
     }
 
@@ -152,13 +149,13 @@ public class TelegramFragment extends Fragment {
         }
 
         if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).startTelegramService();
+            ((MainActivity) getActivity()).startFeishuService();
         }
     }
 
     private void stopService() {
         if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).stopTelegramService();
+            ((MainActivity) getActivity()).stopFeishuService();
         }
     }
 
@@ -168,7 +165,7 @@ public class TelegramFragment extends Fragment {
     public void updateServiceStatus() {
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
-            boolean isRunning = activity.isTelegramServiceRunning();
+            boolean isRunning = activity.isFeishuServiceRunning();
 
             if (isRunning) {
                 tvConnectionStatus.setText("已连接");

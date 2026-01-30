@@ -313,7 +313,7 @@ public class TelegramBotManager {
 
                 apiClient.sendMessage(chatId,
                     "📋 <b>EVCam 远程控制</b>\n" +
-                    "━━━━━━━━━━━━━━━━\n\n" +
+                    "━━━━━━━━━━━━━━\n\n" +
                     "📹 <b>远程录制</b>\n" +
                     "/record ─ 录制60秒视频\n" +
                     "/record 30 ─ 录制指定秒数\n" +
@@ -329,7 +329,7 @@ public class TelegramBotManager {
                     "/status ─ 查看应用状态\n" +
                     "/exit ─ 退出应用\n" +
                     "/help ─ 显示此帮助\n\n" +
-                    "━━━━━━━━━━━━━━━━\n" +
+                    "━━━━━━━━━━━━━━\n" +
                     "💡 所有指令支持中英文");
 
             } else {
@@ -418,12 +418,27 @@ public class TelegramBotManager {
     public void stop() {
         AppLog.d(TAG, "正在停止 Bot...");
         shouldStop = true;
+        isRunning = false;
 
         if (pollingThread != null) {
             pollingThread.interrupt();
+            
+            // 等待轮询线程完全结束，最多等待 35 秒（比 POLL_TIMEOUT 稍长）
+            // 这样可以避免重启时新旧连接冲突导致 409 错误
+            try {
+                pollingThread.join(35000);
+                if (pollingThread.isAlive()) {
+                    AppLog.w(TAG, "轮询线程未能在超时内结束");
+                } else {
+                    AppLog.d(TAG, "轮询线程已完全停止");
+                }
+            } catch (InterruptedException e) {
+                AppLog.w(TAG, "等待轮询线程停止时被中断");
+                Thread.currentThread().interrupt();
+            }
+            pollingThread = null;
         }
 
-        isRunning = false;
         AppLog.d(TAG, "Bot 已停止");
     }
 

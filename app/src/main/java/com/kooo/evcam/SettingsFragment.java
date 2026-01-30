@@ -14,6 +14,8 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -1752,6 +1754,45 @@ public class SettingsFragment extends Fragment {
         nicknameLabel.setTextColor(ContextCompat.getColor(getContext(), R.color.text_primary));
         layout.addView(nicknameLabel);
         
+        // 日志选择标签
+        TextView logTypeLabel = new TextView(getContext());
+        logTypeLabel.setText("选择日志：");
+        logTypeLabel.setTextSize(14);
+        logTypeLabel.setPadding(0, 0, 0, 8);
+        logTypeLabel.setTextColor(ContextCompat.getColor(getContext(), R.color.text_secondary));
+        layout.addView(logTypeLabel);
+        
+        // 日志选择 RadioGroup
+        RadioGroup logTypeGroup = new RadioGroup(getContext());
+        logTypeGroup.setOrientation(RadioGroup.VERTICAL);
+        logTypeGroup.setPadding(0, 0, 0, 16);
+        
+        // 本次运行日志选项
+        RadioButton currentLogRadio = new RadioButton(getContext());
+        currentLogRadio.setId(View.generateViewId());
+        currentLogRadio.setText("本次运行日志");
+        currentLogRadio.setTextColor(ContextCompat.getColor(getContext(), R.color.text_primary));
+        currentLogRadio.setChecked(true);
+        logTypeGroup.addView(currentLogRadio);
+        
+        // 上次运行日志选项
+        RadioButton previousLogRadio = new RadioButton(getContext());
+        previousLogRadio.setId(View.generateViewId());
+        boolean hasPrevious = AppLog.hasPreviousSessionLogs(getContext());
+        if (hasPrevious) {
+            String prevInfo = AppLog.getPreviousSessionLogInfo(getContext());
+            previousLogRadio.setText("上次运行日志" + (prevInfo != null ? "\n  " + prevInfo : ""));
+            previousLogRadio.setEnabled(true);
+        } else {
+            previousLogRadio.setText("上次运行日志（无可用日志）");
+            previousLogRadio.setEnabled(false);
+        }
+        previousLogRadio.setTextColor(ContextCompat.getColor(getContext(), 
+                hasPrevious ? R.color.text_primary : R.color.text_secondary));
+        logTypeGroup.addView(previousLogRadio);
+        
+        layout.addView(logTypeGroup);
+        
         // 问题描述标签 - 适配夜间模式
         TextView descLabel = new TextView(getContext());
         descLabel.setText("问题描述：");
@@ -1779,7 +1820,9 @@ public class SettingsFragment extends Fragment {
                     if (problemDesc.isEmpty()) {
                         problemDesc = "（用户未填写问题描述）";
                     }
-                    performLogUpload(nickname, problemDesc);
+                    // 判断选择了哪个日志
+                    boolean uploadPreviousSession = previousLogRadio.isChecked();
+                    performLogUpload(nickname, problemDesc, uploadPreviousSession);
                 })
                 .setNeutralButton("修改名称", (dialog, which) -> {
                     showDeviceNicknameInputDialog();
@@ -1789,23 +1832,33 @@ public class SettingsFragment extends Fragment {
     }
     
     /**
-     * 执行日志上传
+     * 执行日志上传（默认上传本次运行日志）
      */
     private void performLogUpload(String deviceNickname, String problemDescription) {
+        performLogUpload(deviceNickname, problemDescription, false);
+    }
+    
+    /**
+     * 执行日志上传
+     * @param uploadPreviousSession 是否上传上次运行的日志
+     */
+    private void performLogUpload(String deviceNickname, String problemDescription, boolean uploadPreviousSession) {
         if (getContext() == null) return;
         
         // 禁用按钮防止重复点击
         uploadLogsButton.setEnabled(false);
         uploadLogsButton.setText("上传中...");
         
-        AppLog.uploadLogsToServer(getContext(), deviceNickname, problemDescription, new AppLog.UploadCallback() {
+        String logType = uploadPreviousSession ? "上次运行" : "本次运行";
+        
+        AppLog.uploadLogsToServer(getContext(), deviceNickname, problemDescription, uploadPreviousSession, new AppLog.UploadCallback() {
             @Override
             public void onSuccess() {
                 if (getActivity() != null) {
                     getActivity().runOnUiThread(() -> {
                         uploadLogsButton.setEnabled(true);
                         uploadLogsButton.setText("一键上传");
-                        Toast.makeText(getContext(), "作者已收到本次运行log", Toast.LENGTH_LONG).show();
+                        Toast.makeText(getContext(), "作者已收到" + logType + "日志", Toast.LENGTH_LONG).show();
                     });
                 }
             }

@@ -978,8 +978,17 @@ public class VideoRecorder {
         cachedSurface = null;
         
         if (mediaRecorder != null) {
-            mediaRecorder.reset();
-            mediaRecorder.release();
+            try {
+                mediaRecorder.reset();
+            } catch (IllegalStateException e) {
+                // MediaRecorder 可能处于无效状态（如 Error 状态），忽略此异常
+                AppLog.w(TAG, "Camera " + cameraId + " MediaRecorder.reset() failed (may be in invalid state): " + e.getMessage());
+            }
+            try {
+                mediaRecorder.release();
+            } catch (Exception e) {
+                AppLog.w(TAG, "Camera " + cameraId + " MediaRecorder.release() failed: " + e.getMessage());
+            }
             mediaRecorder = null;
         }
     }

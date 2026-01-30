@@ -30,6 +30,11 @@
                 android:icon="@drawable/ic_nav_telegram"
                 android:checkable="true"
                 android:title="电报远程" />
+            <item
+                android:id="@+id/nav_feishu"
+                android:icon="@drawable/ic_nav_feishu"
+                android:checkable="true"
+                android:title="飞书远程" />
         </menu>
     </item>
 
