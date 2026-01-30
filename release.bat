@@ -125,48 +125,34 @@ set HAS_CHANGES=%ERRORLEVEL%
 git diff --cached --quiet
 set HAS_STAGED=%ERRORLEVEL%
 
-if !HAS_CHANGES! NEQ 0 (
-    echo [提示] 检测到未暂存的更改
-) else if !HAS_STAGED! NEQ 0 (
-    echo [提示] 检测到已暂存的更改
-) else (
-    echo [信息] 工作区干净，无需提交
+set NEED_COMMIT=0
+if !HAS_CHANGES! NEQ 0 set NEED_COMMIT=1
+if !HAS_STAGED! NEQ 0 set NEED_COMMIT=1
+
+if !NEED_COMMIT! EQU 0 (
+    echo [信息] 工作区干净
     goto skip_commit
 )
+echo [提示] 检测到未提交的更改
 
 echo.
-set /p DO_COMMIT="是否提交这些更改？(Y/N): "
-if /i not "!DO_COMMIT!"=="Y" (
-    echo [跳过] 跳过提交步骤
-    goto skip_commit
-)
+set /p DO_COMMIT="是否提交这些更改? (Y/N): "
+if /i not "!DO_COMMIT!"=="Y" goto skip_commit
 
 echo.
-echo [提示] 请输入提交信息（例如: 修复摄像头预览问题）
+echo [提示] 请输入提交信息 (直接回车使用默认: Release !VERSION!)
 set /p COMMIT_MSG="提交信息: "
-
-if "!COMMIT_MSG!"=="" (
-    set COMMIT_MSG=Release !VERSION!
-    echo [信息] 使用默认提交信息: !COMMIT_MSG!
-)
+if "!COMMIT_MSG!"=="" set COMMIT_MSG=Release !VERSION!
 
 echo [提交] 正在提交更改...
 git add .
 git commit -m "!COMMIT_MSG!"
-if errorlevel 1 (
-    echo [错误] 提交失败！
-    pause
-    exit /b 1
-)
+if errorlevel 1 goto commit_failed
 
 echo [推送] 推送到远程仓库...
 REM Get current branch
 for /f "tokens=*" %%i in ('git branch --show-current') do set CURRENT_BRANCH=%%i
 git push origin !CURRENT_BRANCH!
-if errorlevel 1 (
-    echo [警告] 推送失败，但继续发布流程...
-)
-
 echo [完成] 代码已提交并推送
 echo.
 
@@ -175,29 +161,20 @@ echo.
 REM Step 1: Clean
 echo [1/6] 清理旧的构建文件...
 call gradlew.bat clean
-if errorlevel 1 (
-    echo [错误] 清理失败！
-    exit /b 1
-)
+if errorlevel 1 goto build_error
 echo [完成] 清理完成
 echo.
 
 REM Step 2: Build Release APK
 echo [2/6] 构建签名的 Release APK...
 call gradlew.bat assembleRelease
-if errorlevel 1 (
-    echo [错误] 构建失败！
-    exit /b 1
-)
+if errorlevel 1 goto build_error
 echo [完成] 构建成功
 echo.
 
 REM Check APK generated
 set APK_PATH=app\build\outputs\apk\release\app-release.apk
-if not exist "%APK_PATH%" (
-    echo [错误] 找不到生成的 APK 文件: %APK_PATH%
-    exit /b 1
-)
+if not exist "%APK_PATH%" goto apk_not_found
 
 REM Rename APK
 set RENAMED_APK=app\build\outputs\apk\release\EVCam-!VERSION!-release.apk
@@ -208,57 +185,24 @@ echo.
 REM Step 3: Create Git Tag
 echo [3/6] 创建 Git Tag...
 git tag -a !VERSION! -m "Release !VERSION!"
-if errorlevel 1 (
-    echo [警告] Tag 可能已存在，继续...
-)
-
 echo [推送] 推送 Tag 到远程仓库...
 git push origin !VERSION!
-if errorlevel 1 (
-    echo [错误] 推送 Tag 失败！
-    echo 可能的原因：
-    echo   1. Tag 已存在于远程仓库
-    echo   2. 网络连接问题
-    echo   3. 没有权限
-    exit /b 1
-)
+if errorlevel 1 goto tag_push_error
 echo [完成] Tag 推送成功
 echo.
 
 REM Step 4: Check GitHub CLI
 echo [4/6] 检查 GitHub CLI...
 where gh > nul 2>&1
-if errorlevel 1 (
-    echo [警告] 未找到 GitHub CLI (gh^)
-    echo.
-    echo 请手动创建 Release：
-    echo   1. 访问: https://github.com/suyunkai/EVCam/releases/new
-    echo   2. 选择 Tag: !VERSION!
-    echo   3. 上传文件: !RENAMED_APK!
-    echo.
-    echo 或者安装 GitHub CLI: https://cli.github.com/
-    echo.
-    echo APK 文件位置:
-    echo !RENAMED_APK!
-    echo.
-    pause
-    exit /b 0
-)
+if errorlevel 1 goto no_gh_cli
 echo [完成] GitHub CLI 可用
 echo.
 
 REM Step 5: Release Notes
 echo [5/6] 准备发布说明...
 echo.
-echo [提示] 请输入发布说明（直接按回车则留空）
+echo [提示] 请输入发布说明 (直接回车留空)
 set /p RELEASE_NOTES="发布说明: "
-
-if "!RELEASE_NOTES!"=="" (
-    set "RELEASE_NOTES="
-    echo [信息] 发布说明为空
-) else (
-    echo [信息] 发布说明: !RELEASE_NOTES!
-)
 echo.
 
 REM Step 6: Create GitHub Release
@@ -268,19 +212,11 @@ if "!RELEASE_NOTES!"=="" (
 ) else (
     gh release create !VERSION! "!RENAMED_APK!" --title "EVCam !VERSION!" --notes "!RELEASE_NOTES!"
 )
-
-if errorlevel 1 (
-    echo [错误] 创建 Release 失败！
-    echo 请检查：
-    echo   1. 是否已登录 GitHub CLI (运行: gh auth login)
-    echo   2. 是否有仓库权限
-    echo   3. Tag 是否已经有 Release
-    exit /b 1
-)
+if errorlevel 1 goto release_error
 
 echo.
 echo ====================================================
-echo [成功] Release 发布完成！
+echo [成功] Release 发布完成!
 echo ====================================================
 echo.
 echo 版本: !VERSION!
@@ -288,5 +224,45 @@ echo APK: !RENAMED_APK!
 echo.
 echo 查看 Release: gh release view !VERSION! --web
 echo.
-
 exit /b 0
+
+REM Error handlers
+:commit_failed
+echo [错误] 提交失败!
+pause
+exit /b 1
+
+:build_error
+echo [错误] 构建失败!
+exit /b 1
+
+:apk_not_found
+echo [错误] APK not found: %APK_PATH%
+exit /b 1
+
+:tag_push_error
+echo [错误] Tag 推送失败!
+echo   1. Tag 可能已存在
+echo   2. 网络问题
+echo   3. 权限不足
+exit /b 1
+
+:no_gh_cli
+echo [警告] GitHub CLI (gh) not found
+echo.
+echo 请手动创建 Release:
+echo   1. https://github.com/suyunkai/EVCam/releases/new
+echo   2. Tag: !VERSION!
+echo   3. Upload: !RENAMED_APK!
+echo.
+echo APK: !RENAMED_APK!
+echo.
+pause
+exit /b 0
+
+:release_error
+echo [错误] Release 创建失败!
+echo   1. 运行 gh auth login 登录
+echo   2. 检查仓库权限
+echo   3. Tag 可能已有 Release
+exit /b 1
