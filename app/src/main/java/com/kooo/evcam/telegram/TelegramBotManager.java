@@ -64,12 +64,15 @@ public class TelegramBotManager {
     /**
      * 启动消息轮询
      */
-    public void start(CommandCallback commandCallback) {
+    public synchronized void start(CommandCallback commandCallback) {
         if (isRunning) {
             AppLog.w(TAG, "Bot 已在运行");
             return;
         }
 
+        // 立即设置为运行状态，防止重复启动
+        isRunning = true;
+        
         this.currentCommandCallback = commandCallback;
         this.shouldStop = false;
         this.reconnectAttempts = 0;
@@ -106,7 +109,7 @@ public class TelegramBotManager {
                     }
                 }
 
-                isRunning = true;
+                // isRunning 已在 start() 中设置
                 reconnectAttempts = 0;
 
                 // 通知连接成功
@@ -160,9 +163,8 @@ public class TelegramBotManager {
                             if (errorMsg != null && errorMsg.contains("409")) {
                                 conflictRetries++;
                                 if (conflictRetries >= MAX_CONFLICT_RETRIES) {
-                                    AppLog.e(TAG, "409 冲突错误达到最大重试次数，可能有其他设备在运行此 Bot");
-                                    mainHandler.post(() -> connectionCallback.onError(
-                                            "连接冲突：检测到其他设备正在运行此 Bot。\n请关闭其他设备上的 Bot 或稍后重试。"));
+                                    // 只记录日志，不弹窗（不影响实际连接）
+                                    AppLog.w(TAG, "409 冲突错误达到最大重试次数，可能有其他设备在运行此 Bot");
                                     shouldStop = true;
                                     break;
                                 }
@@ -190,8 +192,9 @@ public class TelegramBotManager {
                             startPolling();
                         }
                     }, RECONNECT_DELAY_MS);
-                } else {
-                    mainHandler.post(() -> connectionCallback.onError("启动失败: " + e.getMessage()));
+                } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                    // 只记录日志，不弹窗
+                    AppLog.w(TAG, "达到最大重连次数（" + MAX_RECONNECT_ATTEMPTS + "），启动失败: " + e.getMessage());
                 }
             }
 

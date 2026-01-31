@@ -47,6 +47,9 @@ import com.kooo.evcam.telegram.TelegramBotManager;
 import com.kooo.evcam.telegram.TelegramConfig;
 import com.kooo.evcam.telegram.TelegramPhotoUploadService;
 import com.kooo.evcam.telegram.TelegramVideoUploadService;
+import com.kooo.evcam.remote.RemoteCommandDispatcher;
+import com.kooo.evcam.remote.core.RemotePlatform;
+import com.kooo.evcam.remote.handler.RemoteCommandHandler;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -180,6 +183,9 @@ public class MainActivity extends AppCompatActivity {
     
     // 存储清理管理器
     private StorageCleanupManager storageCleanupManager;
+    
+    // 远程命令分发器（重构后的统一入口）
+    private RemoteCommandDispatcher remoteCommandDispatcher;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -232,6 +238,9 @@ public class MainActivity extends AppCompatActivity {
         
         // 初始化远程录制时间戳
         remoteRecordingTimestamp = null;
+        
+        // 初始化远程命令分发器
+        initRemoteCommandDispatcher();
 
         // 权限检查，但不立即初始化摄像头
         // 等待TextureView准备好后再初始化
@@ -1163,6 +1172,121 @@ public class MainActivity extends AppCompatActivity {
             return cameraManager.getCameraResolutionsInfo();
         }
         return null;
+    }
+
+    /**
+     * 初始化远程命令分发器
+     * 设置 CameraController 和 RecordingStateListener
+     */
+    private void initRemoteCommandDispatcher() {
+        remoteCommandDispatcher = new RemoteCommandDispatcher(this);
+        
+        // 设置摄像头控制器
+        remoteCommandDispatcher.setCameraController(new RemoteCommandHandler.CameraController() {
+            @Override
+            public boolean isRecording() {
+                return MainActivity.this.isRecording || (cameraManager != null && cameraManager.isRecording());
+            }
+            
+            @Override
+            public boolean hasConnectedCameras() {
+                return cameraManager != null && cameraManager.hasConnectedCameras();
+            }
+            
+            @Override
+            public boolean startRecording(String timestamp) {
+                if (cameraManager != null) {
+                    return cameraManager.startRecording(timestamp);
+                }
+                return false;
+            }
+            
+            @Override
+            public void stopRecording(boolean skipTransfer) {
+                if (cameraManager != null) {
+                    cameraManager.stopRecording(skipTransfer);
+                }
+            }
+            
+            @Override
+            public void takePicture(String timestamp) {
+                if (cameraManager != null) {
+                    cameraManager.takePicture(timestamp);
+                }
+            }
+            
+            @Override
+            public void stopRecordingTimer() {
+                MainActivity.this.stopRecordingTimer();
+            }
+            
+            @Override
+            public void stopBlinkAnimation() {
+                MainActivity.this.stopBlinkAnimation();
+            }
+            
+            @Override
+            public void startRecording() {
+                MainActivity.this.startRecording();
+            }
+        });
+        
+        // 设置录制状态监听器
+        remoteCommandDispatcher.setRecordingStateListener(new RemoteCommandHandler.RecordingStateListener() {
+            @Override
+            public void onRemoteRecordingStart() {
+                isRemoteRecording = true;
+            }
+            
+            @Override
+            public void onRemoteRecordingStop() {
+                isRemoteRecording = false;
+                isPreparingRecording = false;
+                stopBlinkAnimation();
+            }
+            
+            @Override
+            public void onPreparing() {
+                isPreparingRecording = true;
+                showPreparingIndicator();
+            }
+            
+            @Override
+            public void onPreparingComplete() {
+                isPreparingRecording = false;
+                hidePreparingIndicator();
+            }
+            
+            @Override
+            public void returnToBackgroundIfRemoteWakeUp() {
+                MainActivity.this.returnToBackgroundIfRemoteWakeUp();
+            }
+            
+            @Override
+            public boolean isRemoteWakeUp() {
+                return MainActivity.this.isRemoteWakeUp;
+            }
+        });
+        
+        AppLog.d(TAG, "RemoteCommandDispatcher 初始化完成");
+    }
+    
+    /**
+     * 更新远程命令分发器的 API 客户端
+     * 在服务启动后调用
+     */
+    private void updateRemoteDispatcherApiClients() {
+        if (remoteCommandDispatcher != null) {
+            if (dingTalkApiClient != null) {
+                remoteCommandDispatcher.setDingTalkApiClient(dingTalkApiClient);
+            }
+            if (telegramApiClient != null) {
+                remoteCommandDispatcher.setTelegramApiClient(telegramApiClient);
+            }
+            if (feishuApiClient != null) {
+                remoteCommandDispatcher.setFeishuApiClient(feishuApiClient);
+            }
+        }
     }
 
     /**
@@ -3268,16 +3392,32 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-        // 创建指令回调
+        // 更新远程命令分发器的 API 客户端
+        if (remoteCommandDispatcher != null) {
+            remoteCommandDispatcher.setDingTalkApiClient(dingTalkApiClient);
+        }
+
+        // 创建指令回调（使用远程命令分发器）
         DingTalkStreamManager.CommandCallback commandCallback = new DingTalkStreamManager.CommandCallback() {
             @Override
             public void onRecordCommand(String conversationId, String conversationType, String userId, int durationSeconds) {
-                startRemoteRecording(conversationId, conversationType, userId, durationSeconds);
+                // 使用新的分发器处理远程录制
+                if (remoteCommandDispatcher != null) {
+                    remoteCommandDispatcher.startDingTalkRecording(conversationId, conversationType, userId, durationSeconds);
+                } else {
+                    // 兼容：如果分发器未初始化，使用旧方法
+                    startRemoteRecording(conversationId, conversationType, userId, durationSeconds);
+                }
             }
 
             @Override
             public void onPhotoCommand(String conversationId, String conversationType, String userId) {
-                startRemotePhoto(conversationId, conversationType, userId);
+                // 使用新的分发器处理远程拍照
+                if (remoteCommandDispatcher != null) {
+                    remoteCommandDispatcher.startDingTalkPhoto(conversationId, conversationType, userId);
+                } else {
+                    startRemotePhoto(conversationId, conversationType, userId);
+                }
             }
 
             @Override
@@ -3366,6 +3506,11 @@ public class MainActivity extends AppCompatActivity {
         // 创建 API 客户端
         telegramApiClient = new TelegramApiClient(telegramConfig);
 
+        // 更新远程命令分发器的 API 客户端
+        if (remoteCommandDispatcher != null) {
+            remoteCommandDispatcher.setTelegramApiClient(telegramApiClient);
+        }
+
         // 创建连接回调
         TelegramBotManager.ConnectionCallback connectionCallback = new TelegramBotManager.ConnectionCallback() {
             @Override
@@ -3395,18 +3540,28 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-        // 创建指令回调
+        // 创建指令回调（使用远程命令分发器）
         TelegramBotManager.CommandCallback commandCallback = new TelegramBotManager.CommandCallback() {
             @Override
             public void onRecordCommand(long chatId, int durationSeconds) {
                 pendingTelegramChatId = chatId;
-                startRemoteRecordingTelegram(chatId, durationSeconds);
+                // 使用新的分发器处理远程录制
+                if (remoteCommandDispatcher != null) {
+                    remoteCommandDispatcher.startTelegramRecording(chatId, durationSeconds);
+                } else {
+                    startRemoteRecordingTelegram(chatId, durationSeconds);
+                }
             }
 
             @Override
             public void onPhotoCommand(long chatId) {
                 pendingTelegramChatId = chatId;
-                startRemotePhotoTelegram(chatId);
+                // 使用新的分发器处理远程拍照
+                if (remoteCommandDispatcher != null) {
+                    remoteCommandDispatcher.startTelegramPhoto(chatId);
+                } else {
+                    startRemotePhotoTelegram(chatId);
+                }
             }
 
             @Override
@@ -3505,6 +3660,11 @@ public class MainActivity extends AppCompatActivity {
         // 创建 API 客户端
         feishuApiClient = new com.kooo.evcam.feishu.FeishuApiClient(feishuConfig);
 
+        // 更新远程命令分发器的 API 客户端
+        if (remoteCommandDispatcher != null) {
+            remoteCommandDispatcher.setFeishuApiClient(feishuApiClient);
+        }
+
         // 创建连接回调
         com.kooo.evcam.feishu.FeishuBotManager.ConnectionCallback connectionCallback = 
             new com.kooo.evcam.feishu.FeishuBotManager.ConnectionCallback() {
@@ -3535,19 +3695,29 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-        // 创建指令回调
+        // 创建指令回调（使用远程命令分发器）
         com.kooo.evcam.feishu.FeishuBotManager.CommandCallback commandCallback = 
             new com.kooo.evcam.feishu.FeishuBotManager.CommandCallback() {
             @Override
             public void onRecordCommand(String chatId, String messageId, int durationSeconds) {
                 pendingFeishuChatId = chatId;
-                startRemoteRecordingFeishu(chatId, durationSeconds);
+                // 使用新的分发器处理远程录制
+                if (remoteCommandDispatcher != null) {
+                    remoteCommandDispatcher.startFeishuRecording(chatId, durationSeconds);
+                } else {
+                    startRemoteRecordingFeishu(chatId, durationSeconds);
+                }
             }
 
             @Override
             public void onPhotoCommand(String chatId, String messageId) {
                 pendingFeishuChatId = chatId;
-                startRemotePhotoFeishu(chatId);
+                // 使用新的分发器处理远程拍照
+                if (remoteCommandDispatcher != null) {
+                    remoteCommandDispatcher.startFeishuPhoto(chatId);
+                } else {
+                    startRemotePhotoFeishu(chatId);
+                }
             }
 
             @Override
@@ -4556,6 +4726,11 @@ public class MainActivity extends AppCompatActivity {
         // 重置远程录制状态
         isRemoteRecording = false;
         wasManualRecordingBeforeRemote = false;
+        
+        // 清理远程命令分发器
+        if (remoteCommandDispatcher != null) {
+            remoteCommandDispatcher.cleanup();
+        }
         
         // 清理息屏录制相关资源
         if (screenStateReceiver != null) {
