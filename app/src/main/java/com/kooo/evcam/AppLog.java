@@ -47,7 +47,7 @@ public final class AppLog {
     
     // Gotify 服务器配置
     private static final String GOTIFY_SERVER_URL = "http://suyunkai.top:40266";
-    private static final String GOTIFY_APP_TOKEN = "ABH7ON6sdUfR4Sc";
+    private static final String GOTIFY_APP_TOKEN = "AXK51-43QvveMDM";
     
     /**
      * 日志上传回调接口
