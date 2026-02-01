@@ -20,7 +20,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="←"
-            android:textSize="18sp"
+            android:textSize="20sp"
             android:minWidth="48dp"
             android:minHeight="48dp"
             android:layout_marginEnd="8dp"
@@ -33,7 +33,7 @@
             android:layout_weight="1"
             android:text="画质设置"
             android:textColor="@color/text_primary"
-            android:textSize="28sp"
+            android:textSize="24sp"
             android:textStyle="bold" />
     </LinearLayout>
 
