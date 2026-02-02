@@ -45,6 +45,12 @@ public class MultiCameraManager {
     private volatile int lastNotifiedSegmentIndex = -1;  // 已通知的分段索引，避免重复通知
     private long overrideSegmentDurationMs = 0;  // 临时覆盖分段时长（0=使用配置值，>0=使用此值）
     
+    // 统一分段时间戳管理（解决多路摄像头分段切换时时间戳差1秒的问题）
+    private String cachedSegmentTimestamp = null;  // 缓存的分段时间戳
+    private long timestampGeneratedTime = 0;  // 时间戳生成时间（毫秒）
+    private static final long TIMESTAMP_CACHE_DURATION_MS = 3000;  // 时间戳缓存有效期（3秒）
+    private final Object timestampLock = new Object();  // 时间戳访问锁
+    
     // Watchdog 回退相关
     private String currentRecordingTimestamp = null;  // 当前录制的时间戳（用于重建时继续录制）
     private Set<String> currentEnabledCameras = null;  // 当前启用的摄像头集合
@@ -128,6 +134,45 @@ public class MultiCameraManager {
 
     public MultiCameraManager(Context context) {
         this.context = context;
+    }
+
+    /**
+     * 统一的分段时间戳提供者
+     * 确保在短时间内（3秒）所有摄像头获取到相同的时间戳
+     * 解决多路摄像头分段切换时因启动时机不同导致时间戳差1秒的问题
+     */
+    private final VideoRecorder.SegmentTimestampProvider segmentTimestampProvider = 
+            new VideoRecorder.SegmentTimestampProvider() {
+        @Override
+        public String getSegmentTimestamp() {
+            synchronized (timestampLock) {
+                long now = System.currentTimeMillis();
+                // 如果缓存的时间戳仍在有效期内，返回缓存值
+                if (cachedSegmentTimestamp != null && 
+                    (now - timestampGeneratedTime) < TIMESTAMP_CACHE_DURATION_MS) {
+                    AppLog.d(TAG, "Using cached segment timestamp: " + cachedSegmentTimestamp + 
+                            " (age: " + (now - timestampGeneratedTime) + "ms)");
+                    return cachedSegmentTimestamp;
+                }
+                // 生成新的时间戳
+                cachedSegmentTimestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+                        .format(new Date());
+                timestampGeneratedTime = now;
+                AppLog.d(TAG, "Generated new segment timestamp: " + cachedSegmentTimestamp);
+                return cachedSegmentTimestamp;
+            }
+        }
+    };
+
+    /**
+     * 清除缓存的分段时间戳
+     * 在开始新的录制时调用，确保使用新的时间戳
+     */
+    private void clearCachedSegmentTimestamp() {
+        synchronized (timestampLock) {
+            cachedSegmentTimestamp = null;
+            timestampGeneratedTime = 0;
+        }
     }
     
     private SegmentSwitchCallback segmentSwitchCallback;
@@ -443,16 +488,24 @@ public class MultiCameraManager {
         // 为已初始化的摄像头创建录制器实例
         recorders.clear();
         if (frontId != null && cameras.containsKey("front")) {
-            recorders.put("front", new VideoRecorder(frontId));
+            VideoRecorder recorder = new VideoRecorder(frontId);
+            recorder.setTimestampProvider(segmentTimestampProvider);  // 设置统一时间戳提供者
+            recorders.put("front", recorder);
         }
         if (backId != null && cameras.containsKey("back")) {
-            recorders.put("back", new VideoRecorder(backId));
+            VideoRecorder recorder = new VideoRecorder(backId);
+            recorder.setTimestampProvider(segmentTimestampProvider);  // 设置统一时间戳提供者
+            recorders.put("back", recorder);
         }
         if (leftId != null && cameras.containsKey("left")) {
-            recorders.put("left", new VideoRecorder(leftId));
+            VideoRecorder recorder = new VideoRecorder(leftId);
+            recorder.setTimestampProvider(segmentTimestampProvider);  // 设置统一时间戳提供者
+            recorders.put("left", recorder);
         }
         if (rightId != null && cameras.containsKey("right")) {
-            recorders.put("right", new VideoRecorder(rightId));
+            VideoRecorder recorder = new VideoRecorder(rightId);
+            recorder.setTimestampProvider(segmentTimestampProvider);  // 设置统一时间戳提供者
+            recorders.put("right", recorder);
         }
 
         // 为每个录制器设置回调
@@ -644,6 +697,9 @@ public class MultiCameraManager {
             return false;
         }
 
+        // 清除缓存的分段时间戳，开始新的录制周期
+        clearCachedSegmentTimestamp();
+
         // 根据模式选择录制方式
         if (useCodecRecording) {
             return startCodecRecording(timestamp, null);
@@ -662,6 +718,9 @@ public class MultiCameraManager {
             AppLog.w(TAG, "Already recording");
             return false;
         }
+
+        // 清除缓存的分段时间戳，开始新的录制周期
+        clearCachedSegmentTimestamp();
 
         // 根据模式选择录制方式
         if (useCodecRecording) {
@@ -1042,6 +1101,9 @@ public class MultiCameraManager {
                     encodeWidth, 
                     encodeHeight
             );
+
+            // 设置统一时间戳提供者（确保多路摄像头分段切换时使用相同时间戳）
+            codecRecorder.setTimestampProvider(segmentTimestampProvider);
 
             // 设置录制参数
             codecRecorder.setSegmentDuration(segmentDurationMs);
