@@ -48,7 +48,7 @@ public class MultiCameraManager {
     // 统一分段时间戳管理（解决多路摄像头分段切换时时间戳差1秒的问题）
     private String cachedSegmentTimestamp = null;  // 缓存的分段时间戳
     private long timestampGeneratedTime = 0;  // 时间戳生成时间（毫秒）
-    private static final long TIMESTAMP_CACHE_DURATION_MS = 3000;  // 时间戳缓存有效期（3秒）
+    private static final long TIMESTAMP_CACHE_DURATION_MS = 10000;  // 时间戳缓存有效期（10秒，需覆盖各摄像头首次写入的时间差）
     private final Object timestampLock = new Object();  // 时间戳访问锁
     
     // Watchdog 回退相关
