@@ -50,6 +50,22 @@ public class TelegramBotManager {
         String onStartRecordingCommand();
         String onStopRecordingCommand();
         String onExitCommand(boolean confirmed);
+        
+        /**
+         * 切换到前台
+         * @return 执行结果消息
+         */
+        default String onForegroundCommand() {
+            return "功能不可用";
+        }
+        
+        /**
+         * 切换到后台
+         * @return 执行结果消息
+         */
+        default String onBackgroundCommand() {
+            return "功能不可用";
+        }
     }
 
     public TelegramBotManager(Context context, TelegramConfig config,
@@ -311,6 +327,28 @@ public class TelegramBotManager {
                     apiClient.sendMessage(chatId, "❌ 功能不可用");
                 }
 
+            } else if ("前台".equals(command) || "/foreground".equals(command) ||
+                       "foreground".equalsIgnoreCase(command)) {
+                // 前台指令：将应用切换到前台
+                AppLog.d(TAG, "收到前台指令");
+                if (currentCommandCallback != null) {
+                    String result = currentCommandCallback.onForegroundCommand();
+                    apiClient.sendMessage(chatId, result);
+                } else {
+                    apiClient.sendMessage(chatId, "❌ 功能不可用");
+                }
+
+            } else if ("后台".equals(command) || "/background".equals(command) ||
+                       "background".equalsIgnoreCase(command)) {
+                // 后台指令：将应用切换到后台
+                AppLog.d(TAG, "收到后台指令");
+                if (currentCommandCallback != null) {
+                    String result = currentCommandCallback.onBackgroundCommand();
+                    apiClient.sendMessage(chatId, result);
+                } else {
+                    apiClient.sendMessage(chatId, "❌ 功能不可用");
+                }
+
             } else if ("/help".equals(command) || "帮助".equals(command) ||
                        "/start".equals(command)) {
 
@@ -328,6 +366,10 @@ public class TelegramBotManager {
                     "📷 <b>拍照</b>\n" +
                     "/photo ─ 拍摄照片\n" +
                     "拍照 ─ 中文指令\n\n" +
+                    "🔄 <b>前后台切换</b>\n" +
+                    "/foreground ─ 切换到前台\n" +
+                    "/background ─ 切换到后台\n" +
+                    "前台 / 后台 ─ 中文指令\n\n" +
                     "ℹ️ <b>其他</b>\n" +
                     "/status ─ 查看应用状态\n" +
                     "/exit ─ 退出应用\n" +

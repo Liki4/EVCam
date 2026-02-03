@@ -173,7 +173,6 @@ public class AppConfig {
     public static final String CAR_MODEL_L7 = "galaxy_l7";  // 银河L6/L7
     public static final String CAR_MODEL_L7_MULTI = "galaxy_l7_multi";  // 银河L7-多按钮
     public static final String CAR_MODEL_PHONE = "phone";  // 手机
-    public static final String CAR_MODEL_LYNK0708 = "lynk_0708";  // 领克07/08
     public static final String CAR_MODEL_CUSTOM = "custom";  // 自定义车型
     
     private final SharedPreferences prefs;
@@ -634,8 +633,6 @@ public class AppConfig {
         String carModel = getCarModel();
         // 预设车型返回固定的摄像头数量
         switch (carModel) {
-            case CAR_MODEL_LYNK0708:
-                return 1;  // 领克07/08：1摄
             case CAR_MODEL_PHONE:
                 return 2;  // 手机：2摄
             case CAR_MODEL_GALAXY_E5:
@@ -803,13 +800,6 @@ public class AppConfig {
      * @return 默认名称
      */
     public String getDefaultCameraName(String position) {
-        String carModel = getCarModel();
-        
-        // 领克07/08：不显示摄像头角标
-        if (CAR_MODEL_LYNK0708.equals(carModel)) {
-            return "";  // 返回空字符串，角标不显示
-        }
-        
         // 默认名称（适用于大多数预设车型）
         switch (position) {
             case "front":

@@ -115,6 +115,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     
     // 息屏录制相关
     private android.content.BroadcastReceiver screenStateReceiver;  // 屏幕状态广播接收器
+    private android.content.BroadcastReceiver backgroundCommandReceiver;  // 后台切换广播接收器
     private android.os.Handler screenStateHandler;  // 息屏/亮屏延迟处理
     private Runnable screenOffStopRunnable;  // 息屏停止录制的延迟任务
     private Runnable screenOnStartRunnable;  // 亮屏恢复录制的延迟任务
@@ -124,6 +125,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     private static final long SCREEN_OFF_DELAY_MS = 10000;  // 息屏后等待10秒（停止录制）
     private static final long SCREEN_ON_DELAY_MS = 10000;   // 亮屏后等待10秒（恢复录制）
     private static final long SCREEN_OFF_BACKGROUND_DELAY_MS = 15000;  // 息屏后等待15秒（退后台）
+    
     
     // 车型配置相关
     private AppConfig appConfig;
@@ -189,6 +191,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     
     // 远程命令分发器（重构后的统一入口）
     private RemoteCommandDispatcher remoteCommandDispatcher;
+    
+    // 心跳推图管理器
+    private com.kooo.evcam.heartbeat.HeartbeatManager heartbeatManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -483,6 +488,17 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         }
 
         AppLog.d(TAG, "Received remote command from intent: " + action);
+
+        // 处理前台切换指令（不需要等待摄像头）
+        if ("foreground".equals(action)) {
+            intent.removeExtra("remote_action");
+            AppLog.d(TAG, "Foreground command executed - app brought to front");
+            // Activity 已经被启动到前台，不需要额外操作
+            return;
+        }
+        
+        // 注意：后台指令现在通过广播处理（WakeUpHelper.ACTION_MOVE_TO_BACKGROUND）
+        // 不再通过 startActivity 方式，避免闪屏问题
 
         // 先切换到主界面（录制界面），确保显示正确的界面
         showRecordingInterface();
@@ -903,13 +919,6 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             configuredCameraCount = 2;
             requiredTextureCount = 2;
             AppLog.d(TAG, "使用手机配置：自适应2摄像头布局");
-        }
-        // 领克07/08：左侧竖向按钮+右侧单摄像头布局
-        else if (AppConfig.CAR_MODEL_LYNK0708.equals(carModel)) {
-            layoutId = R.layout.activity_main_lynk0708;
-            configuredCameraCount = 1;
-            requiredTextureCount = 1;
-            AppLog.d(TAG, "使用领克07/08配置：左侧竖向按钮+右侧单摄像头布局");
         }
         // 自定义车型：根据配置选择布局
         else if (appConfig.isCustomCarModel()) {
@@ -1538,6 +1547,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             } else if (itemId == R.id.nav_wechat_mini) {
                 // 显示微信小程序界面
                 showWechatMiniInterface();
+            } else if (itemId == R.id.nav_heartbeat) {
+                // 显示心跳推图界面
+                showHeartbeatInterface();
             } else if (itemId == R.id.nav_settings) {
                 showSettingsInterface();
             }
@@ -1816,6 +1828,21 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         FragmentManager fragmentManager = getSupportFragmentManager();
         FragmentTransaction transaction = fragmentManager.beginTransaction();
         transaction.replace(R.id.fragment_container, new WechatMiniFragment());
+        transaction.commit();
+    }
+    
+    /**
+     * 显示心跳推图界面
+     */
+    private void showHeartbeatInterface() {
+        // 隐藏录制布局，显示Fragment容器
+        recordingLayout.setVisibility(View.GONE);
+        fragmentContainer.setVisibility(View.VISIBLE);
+
+        // 显示 HeartbeatFragment
+        FragmentManager fragmentManager = getSupportFragmentManager();
+        FragmentTransaction transaction = fragmentManager.beginTransaction();
+        transaction.replace(R.id.fragment_container, new com.kooo.evcam.heartbeat.HeartbeatFragment());
         transaction.commit();
     }
     
@@ -2356,6 +2383,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 
                 // 注册摄像头到亮度/降噪调节管理器
                 registerCamerasToImageAdjustManager();
+                
+                // 初始化心跳推图管理器
+                initHeartbeatManager();
 
                 AppLog.d(TAG, "Camera initialized with " + configuredCameraCount + " cameras");
                 //Toast.makeText(this, "已打开 " + configuredCameraCount + " 个摄像头", Toast.LENGTH_SHORT).show();
@@ -2776,6 +2806,34 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         registerReceiver(screenStateReceiver, filter);
         
         AppLog.d(TAG, "息屏状态广播接收器已注册");
+        
+        // 初始化后台切换广播接收器
+        initBackgroundCommandReceiver();
+    }
+    
+    /**
+     * 初始化后台切换广播接收器
+     * 用于接收远程"后台"指令，避免使用 startActivity 导致闪屏
+     */
+    private void initBackgroundCommandReceiver() {
+        backgroundCommandReceiver = new android.content.BroadcastReceiver() {
+            @Override
+            public void onReceive(android.content.Context context, android.content.Intent intent) {
+                String action = intent.getAction();
+                if (WakeUpHelper.ACTION_MOVE_TO_BACKGROUND.equals(action)) {
+                    AppLog.d(TAG, "收到后台切换广播");
+                    // 直接退到后台，无需启动 Activity
+                    moveTaskToBack(true);
+                    AppLog.d(TAG, "应用已切换到后台（通过广播）");
+                }
+            }
+        };
+        
+        android.content.IntentFilter filter = new android.content.IntentFilter();
+        filter.addAction(WakeUpHelper.ACTION_MOVE_TO_BACKGROUND);
+        registerReceiver(backgroundCommandReceiver, filter);
+        
+        AppLog.d(TAG, "后台切换广播接收器已注册");
     }
     
     /**
@@ -2784,6 +2842,11 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     private void onScreenOff() {
         isScreenOff = true;
         AppLog.d(TAG, "检测到息屏");
+        
+        // 通知心跳管理器屏幕状态（由 HeartbeatManager 处理息屏推图逻辑）
+        if (heartbeatManager != null) {
+            heartbeatManager.onScreenOff();
+        }
         
         // 取消可能存在的亮屏恢复录制任务
         if (screenOnStartRunnable != null) {
@@ -2915,6 +2978,11 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     private void onScreenOn() {
         isScreenOff = false;
         AppLog.d(TAG, "检测到亮屏");
+        
+        // 通知心跳管理器屏幕状态（由 HeartbeatManager 处理停止息屏推图）
+        if (heartbeatManager != null) {
+            heartbeatManager.onScreenOn();
+        }
         
         // 取消可能存在的息屏停止录制任务
         if (screenOffStopRunnable != null) {
@@ -3390,6 +3458,16 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             public String onExitCommand(boolean confirmed) {
                 return handleExitCommand(confirmed);
             }
+
+            @Override
+            public String onForegroundCommand() {
+                return handleForegroundCommand();
+            }
+
+            @Override
+            public String onBackgroundCommand() {
+                return handleBackgroundCommand();
+            }
         };
 
         // 创建并启动 Stream 管理器（启用自动重连）
@@ -3529,6 +3607,16 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             @Override
             public String onExitCommand(boolean confirmed) {
                 return handleExitCommand(confirmed);
+            }
+
+            @Override
+            public String onForegroundCommand() {
+                return handleForegroundCommand();
+            }
+
+            @Override
+            public String onBackgroundCommand() {
+                return handleBackgroundCommand();
             }
         };
 
@@ -3682,6 +3770,16 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             public String onExitCommand(boolean confirmed) {
                 return handleExitCommand(confirmed);
             }
+
+            @Override
+            public String onForegroundCommand() {
+                return handleForegroundCommand();
+            }
+
+            @Override
+            public String onBackgroundCommand() {
+                return handleBackgroundCommand();
+            }
         };
 
         // 创建并启动 Bot 管理器
@@ -3783,7 +3881,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 // 忽略存储获取错误
             }
             
-            // 应用状态
+            // 应用状态（基于 Activity 生命周期）
+            // isInBackground 在 onPause() 时设为 true，onResume() 时设为 false
+            // moveTaskToBack() 会触发 onPause()，所以这个判断是准确的
             sb.append("📱 应用: ").append(isInBackground ? "后台" : "前台").append("\n");
             
             // 分隔线
@@ -3798,6 +3898,24 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 sb.append("+息屏");
             }
             sb.append("\n");
+            
+            // 心跳推图
+            if (heartbeatManager != null) {
+                com.kooo.evcam.heartbeat.HeartbeatConfig hbConfig = heartbeatManager.getConfig();
+                if (hbConfig.isEnabled()) {
+                    sb.append("• 心跳推图: 开");
+                    if (hbConfig.isScreenOnPushEnabled() && hbConfig.isScreenOffPushEnabled()) {
+                        sb.append("（亮屏+息屏）");
+                    } else if (hbConfig.isScreenOnPushEnabled()) {
+                        sb.append("（亮屏）");
+                    } else if (hbConfig.isScreenOffPushEnabled()) {
+                        sb.append("（息屏）");
+                    }
+                    sb.append("\n");
+                } else {
+                    sb.append("• 心跳推图: 关\n");
+                }
+            }
             
             // 分段时长
             int segmentMin = appConfig.getSegmentDurationMinutes();
@@ -3860,6 +3978,35 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         WakeUpHelper.launchForStopRecording(this);
         
         return "⏹️ 录制已停止" + durationInfo + "\n应用将退到后台";
+    }
+
+    /**
+     * 处理前台指令
+     * 将应用切换到前台
+     */
+    private String handleForegroundCommand() {
+        AppLog.d(TAG, "处理前台指令");
+        
+        // 使用 WakeUpHelper 将应用唤醒到前台
+        WakeUpHelper.launchForForeground(this);
+        
+        return "📱 应用已切换到前台";
+    }
+
+    /**
+     * 处理后台指令
+     * 将应用切换到后台
+     */
+    private String handleBackgroundCommand() {
+        AppLog.d(TAG, "处理后台指令");
+        
+        // 在主线程中执行退到后台
+        runOnUiThread(() -> {
+            moveTaskToBack(true);
+            AppLog.d(TAG, "应用已切换到后台");
+        });
+        
+        return "📴 应用已切换到后台";
     }
 
     /**
@@ -3954,6 +4101,11 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         isInBackground = true;
         AppLog.d(TAG, "onPause called, isRecording=" + isRecording);
         
+        // 暂停心跳推图（进入后台时）
+        if (heartbeatManager != null) {
+            heartbeatManager.pause();
+        }
+        
         // 通知悬浮窗服务：应用进入后台，显示悬浮窗
         if (appConfig.isFloatingWindowEnabled()) {
             FloatingWindowService.sendAppForegroundState(this, false);
@@ -4045,8 +4197,20 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 } else {
                     AppLog.d(TAG, "Recording in progress, cameras should still be connected");
                 }
+                
+                // 启动心跳推图（返回前台时，如果已启用）
+                if (heartbeatManager != null && heartbeatManager.getConfig().isEnabled()) {
+                    // 延迟启动，等待摄像头准备好
+                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                        if (heartbeatManager != null && !isInBackground) {
+                            heartbeatManager.start();
+                        }
+                    }, 1500);
+                }
             }, 500);
         }
+        // 注意：心跳服务自启动逻辑已移至 initHeartbeatManager() 中
+        // 因为 onResume 执行时 HeartbeatManager 可能还没有初始化
     }
 
     @Override
@@ -4071,6 +4235,12 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             remoteCommandDispatcher.cleanup();
         }
         
+        // 清理心跳推图管理器
+        if (heartbeatManager != null) {
+            heartbeatManager.destroy();
+            heartbeatManager = null;
+        }
+        
         // 清理息屏录制相关资源
         if (screenStateReceiver != null) {
             try {
@@ -4079,6 +4249,16 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 AppLog.w(TAG, "注销息屏广播接收器时出错: " + e.getMessage());
             }
             screenStateReceiver = null;
+        }
+        
+        // 清理后台切换广播接收器
+        if (backgroundCommandReceiver != null) {
+            try {
+                unregisterReceiver(backgroundCommandReceiver);
+            } catch (Exception e) {
+                AppLog.w(TAG, "注销后台切换广播接收器时出错: " + e.getMessage());
+            }
+            backgroundCommandReceiver = null;
         }
         if (screenStateHandler != null) {
             if (screenOffStopRunnable != null) {
@@ -4233,6 +4413,207 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         }
         
         AppLog.d(TAG, "Registered cameras to ImageAdjustManager, adjust enabled: " + enabled);
+    }
+    
+    // ==================== 心跳推图相关方法 ====================
+    
+    /**
+     * 初始化心跳推图管理器
+     */
+    private void initHeartbeatManager() {
+        if (heartbeatManager == null) {
+            heartbeatManager = new com.kooo.evcam.heartbeat.HeartbeatManager(this);
+        }
+        
+        // 设置相机列表（去重，避免同一个物理相机被添加多次）
+        if (cameraManager != null) {
+            List<SingleCamera> cameras = new ArrayList<>();
+            java.util.Set<String> addedCameraIds = new java.util.HashSet<>();
+            
+            String[] positions = {"front", "back", "left", "right"};
+            for (String position : positions) {
+                SingleCamera camera = cameraManager.getCamera(position);
+                if (camera != null) {
+                    String cameraId = camera.getCameraId();
+                    // 只添加未添加过的相机（基于物理相机ID去重）
+                    if (!addedCameraIds.contains(cameraId)) {
+                        cameras.add(camera);
+                        addedCameraIds.add(cameraId);
+                        AppLog.d(TAG, "HeartbeatManager 添加相机: position=" + position + ", cameraId=" + cameraId);
+                    }
+                }
+            }
+            heartbeatManager.setCameras(cameras);
+            AppLog.d(TAG, "HeartbeatManager 相机数量: " + cameras.size());
+        }
+        
+        // 设置状态提供者
+        heartbeatManager.setStatusProvider(() -> buildHeartbeatStatusJson());
+        
+        // 设置 Activity 控制器（用于息屏推图）
+        heartbeatManager.setActivityController(new com.kooo.evcam.heartbeat.HeartbeatManager.ActivityController() {
+            @Override
+            public boolean isInBackground() {
+                return isInBackground;
+            }
+            
+            @Override
+            public boolean isRecording() {
+                return isRecording;
+            }
+            
+            @Override
+            public boolean shouldKeepForeground() {
+                // 如果开启了自动录制+息屏录制，需要保持前台
+                return appConfig.isAutoStartRecording() && appConfig.isScreenOffRecordingEnabled();
+            }
+            
+            @Override
+            public void wakeUpToForeground() {
+                Intent intent = new Intent(MainActivity.this, MainActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                startActivity(intent);
+            }
+            
+            @Override
+            public void moveToBackground() {
+                moveTaskToBack(true);
+            }
+            
+            @Override
+            public void openCameras() {
+                if (cameraManager != null) {
+                    cameraManager.openAllCameras();
+                }
+            }
+            
+            @Override
+            public void closeCameras() {
+                if (cameraManager != null) {
+                    cameraManager.closeAllCameras();
+                }
+            }
+            
+            @Override
+            public boolean hasCamerasConnected() {
+                return cameraManager != null && cameraManager.hasConnectedCameras();
+            }
+        });
+        
+        AppLog.d(TAG, "HeartbeatManager initialized");
+        
+        // 检查是否需要自启动心跳服务
+        // 必须在 HeartbeatManager 初始化完成后执行，不能放在 onResume 中
+        // 因为 onResume 执行时 HeartbeatManager 可能还没有初始化
+        com.kooo.evcam.heartbeat.HeartbeatConfig hbConfig = heartbeatManager.getConfig();
+        if (hbConfig.isAutoStartEnabled() && hbConfig.isConfigured()) {
+            AppLog.d(TAG, "心跳服务自动启动检查：autoStart=true, configured=true");
+            // 延迟启动，等待相机完全就绪
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                if (heartbeatManager != null) {
+                    heartbeatManager.onConfigChanged();
+                }
+            }, 1500);
+        }
+    }
+    
+    /**
+     * 获取心跳管理器（供 Fragment 调用）
+     */
+    public com.kooo.evcam.heartbeat.HeartbeatManager getHeartbeatManager() {
+        return heartbeatManager;
+    }
+    
+    /**
+     * 获取已连接的摄像头数量
+     */
+    public int getConnectedCameraCount() {
+        if (cameraManager != null) {
+            return cameraManager.getConnectedCameraCount();
+        }
+        return 0;
+    }
+    
+    /**
+     * 获取配置的摄像头总数
+     */
+    public int getTotalCameraCount() {
+        return configuredCameraCount;
+    }
+    
+    /**
+     * 心跳配置变更时调用（从 HeartbeatFragment 调用）
+     */
+    public void onHeartbeatConfigChanged() {
+        if (heartbeatManager != null) {
+            heartbeatManager.onConfigChanged();
+        }
+    }
+    
+    /**
+     * 构建心跳推图的状态 JSON
+     */
+    private String buildHeartbeatStatusJson() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
+        
+        // 录制状态
+        sb.append("\"isRecording\":").append(isRecording).append(",");
+        if (isRecording && recordingStartTime > 0) {
+            long elapsed = System.currentTimeMillis() - recordingStartTime;
+            sb.append("\"recordingDurationMs\":").append(elapsed).append(",");
+        }
+        
+        // 存储信息
+        try {
+            File storageDir = StorageHelper.getVideoDir(this);
+            long availableSpace = StorageHelper.getAvailableSpace(storageDir);
+            sb.append("\"storageLocation\":\"").append(escapeJsonString(appConfig.getStorageLocation())).append("\",");
+            sb.append("\"availableSpaceBytes\":").append(availableSpace).append(",");
+            sb.append("\"availableSpaceText\":\"").append(escapeJsonString(StorageHelper.formatSize(availableSpace))).append("\",");
+        } catch (Exception e) {
+            sb.append("\"storageLocation\":\"unknown\",");
+            sb.append("\"availableSpaceBytes\":0,");
+            sb.append("\"availableSpaceText\":\"未知\",");
+        }
+        
+        // 配置信息
+        sb.append("\"carModel\":\"").append(escapeJsonString(appConfig.getCarModel())).append("\",");
+        sb.append("\"segmentDurationMinutes\":").append(appConfig.getSegmentDurationMinutes()).append(",");
+        sb.append("\"resolution\":\"").append(escapeJsonString(appConfig.getTargetResolution())).append("\",");
+        
+        // 相机状态
+        int connectedCameras = cameraManager != null ? cameraManager.getConnectedCameraCount() : 0;
+        sb.append("\"connectedCameras\":").append(connectedCameras).append(",");
+        sb.append("\"totalCameras\":").append(configuredCameraCount).append(",");
+        
+        // App 信息
+        try {
+            String versionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            sb.append("\"appVersion\":\"").append(escapeJsonString(versionName)).append("\",");
+        } catch (Exception e) {
+            sb.append("\"appVersion\":\"unknown\",");
+        }
+        
+        // 时间戳
+        sb.append("\"timestamp\":").append(System.currentTimeMillis());
+        
+        sb.append("}");
+        return sb.toString();
+    }
+    
+    /**
+     * 转义 JSON 字符串
+     */
+    private String escapeJsonString(String str) {
+        if (str == null) {
+            return "";
+        }
+        return str.replace("\\", "\\\\")
+                  .replace("\"", "\\\"")
+                  .replace("\n", "\\n")
+                  .replace("\r", "\\r")
+                  .replace("\t", "\\t");
     }
     
     /**
