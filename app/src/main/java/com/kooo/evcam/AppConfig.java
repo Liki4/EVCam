@@ -166,6 +166,27 @@ public class AppConfig {
     private static final String KEY_CAMERA_BACK_ROTATION = "camera_back_rotation";  // 后摄像头旋转角度
     private static final String KEY_CAMERA_LEFT_ROTATION = "camera_left_rotation";  // 左摄像头旋转角度
     private static final String KEY_CAMERA_RIGHT_ROTATION = "camera_right_rotation";  // 右摄像头旋转角度
+    private static final String KEY_CAMERA_FRONT_MIRROR = "camera_front_mirror";  // 前摄像头镜像
+    private static final String KEY_CAMERA_BACK_MIRROR = "camera_back_mirror";  // 后摄像头镜像
+    private static final String KEY_CAMERA_LEFT_MIRROR = "camera_left_mirror";  // 左摄像头镜像
+    private static final String KEY_CAMERA_RIGHT_MIRROR = "camera_right_mirror";  // 右摄像头镜像
+    
+    // 摄像头裁剪配置（每个方向的裁剪像素值）
+    private static final String KEY_CAMERA_CROP_PREFIX = "camera_crop_";  // 裁剪配置前缀
+    
+    // 自定义车型自由操控配置
+    private static final String KEY_CUSTOM_FREE_CONTROL_ENABLED = "custom_free_control_enabled";  // 自由操控开关
+    private static final String KEY_CUSTOM_BUTTON_STYLE = "custom_button_style";  // 按钮样式（standard/multi）
+    private static final String KEY_CUSTOM_BUTTON_ORIENTATION = "custom_button_orientation";  // 按钮布局方向（horizontal/vertical）
+    private static final String KEY_CUSTOM_LAYOUT_DATA = "custom_layout_data";  // 布局位置数据（JSON格式）
+    
+    // 按钮样式常量
+    public static final String BUTTON_STYLE_STANDARD = "standard";  // 标准按钮（E5风格）
+    public static final String BUTTON_STYLE_MULTI = "multi";        // 多按钮（L7-多按钮风格）
+    
+    // 按钮方向常量
+    public static final String BUTTON_ORIENTATION_HORIZONTAL = "horizontal";  // 横版
+    public static final String BUTTON_ORIENTATION_VERTICAL = "vertical";      // 竖版
     
     // 车型常量
     public static final String CAR_MODEL_GALAXY_E5 = "galaxy_e5";  // 银河E5
@@ -873,6 +894,92 @@ public class AppConfig {
         }
         return prefs.getInt(key, 0);
     }
+    
+    /**
+     * 设置摄像头镜像
+     * @param position 摄像头位置（front/back/left/right）
+     * @param mirror 是否镜像
+     */
+    public void setCameraMirror(String position, boolean mirror) {
+        String key;
+        switch (position) {
+            case "front":
+                key = KEY_CAMERA_FRONT_MIRROR;
+                break;
+            case "back":
+                key = KEY_CAMERA_BACK_MIRROR;
+                break;
+            case "left":
+                key = KEY_CAMERA_LEFT_MIRROR;
+                break;
+            case "right":
+                key = KEY_CAMERA_RIGHT_MIRROR;
+                break;
+            default:
+                return;
+        }
+        prefs.edit().putBoolean(key, mirror).apply();
+        AppLog.d(TAG, position + " 摄像头镜像设置: " + mirror);
+    }
+
+    /**
+     * 获取摄像头镜像设置
+     * @param position 摄像头位置（front/back/left/right）
+     * @return 是否镜像，默认为false（不镜像）
+     */
+    public boolean getCameraMirror(String position) {
+        String key;
+        switch (position) {
+            case "front":
+                key = KEY_CAMERA_FRONT_MIRROR;
+                break;
+            case "back":
+                key = KEY_CAMERA_BACK_MIRROR;
+                break;
+            case "left":
+                key = KEY_CAMERA_LEFT_MIRROR;
+                break;
+            case "right":
+                key = KEY_CAMERA_RIGHT_MIRROR;
+                break;
+            default:
+                return false;
+        }
+        return prefs.getBoolean(key, false);
+    }
+
+    /**
+     * 设置摄像头裁剪值
+     * @param position 位置（front/back/left/right）
+     * @param direction 方向（top/bottom/left/right）
+     * @param pixels 裁剪像素值
+     */
+    public void setCameraCrop(String position, String direction, int pixels) {
+        String key = KEY_CAMERA_CROP_PREFIX + position + "_" + direction;
+        prefs.edit().putInt(key, Math.max(0, pixels)).apply();
+    }
+
+    /**
+     * 获取摄像头裁剪值
+     * @param position 位置（front/back/left/right）
+     * @param direction 方向（top/bottom/left/right）
+     * @return 裁剪像素值，默认为0
+     */
+    public int getCameraCrop(String position, String direction) {
+        String key = KEY_CAMERA_CROP_PREFIX + position + "_" + direction;
+        return prefs.getInt(key, 0);
+    }
+
+    /**
+     * 重置摄像头的所有裁剪值
+     * @param position 位置（front/back/left/right）
+     */
+    public void resetCameraCrop(String position) {
+        setCameraCrop(position, "top", 0);
+        setCameraCrop(position, "bottom", 0);
+        setCameraCrop(position, "left", 0);
+        setCameraCrop(position, "right", 0);
+    }
 
     /**
      * 获取所有摄像头配置（用于自定义车型）
@@ -1558,5 +1665,118 @@ public class AppConfig {
             case EFFECT_MODE_AQUA: return "水蓝";
             default: return "未知";
         }
+    }
+    
+    // ==================== 自定义车型自由操控配置相关方法 ====================
+    
+    /**
+     * 设置自由操控开关
+     * @param enabled true 表示启用自由操控
+     */
+    public void setCustomFreeControlEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_CUSTOM_FREE_CONTROL_ENABLED, enabled).apply();
+        AppLog.d(TAG, "自由操控设置: " + (enabled ? "启用" : "禁用"));
+    }
+    
+    /**
+     * 获取自由操控开关状态
+     * @return true 表示启用自由操控
+     */
+    public boolean isCustomFreeControlEnabled() {
+        return prefs.getBoolean(KEY_CUSTOM_FREE_CONTROL_ENABLED, false);
+    }
+    
+    /**
+     * 设置按钮样式
+     * @param style 按钮样式（BUTTON_STYLE_STANDARD / BUTTON_STYLE_MULTI）
+     */
+    public void setCustomButtonStyle(String style) {
+        prefs.edit().putString(KEY_CUSTOM_BUTTON_STYLE, style).apply();
+        AppLog.d(TAG, "按钮样式设置: " + style);
+    }
+    
+    /**
+     * 获取按钮样式
+     * @return 按钮样式，默认为标准按钮
+     */
+    public String getCustomButtonStyle() {
+        return prefs.getString(KEY_CUSTOM_BUTTON_STYLE, BUTTON_STYLE_STANDARD);
+    }
+    
+    /**
+     * 设置按钮布局方向
+     * @param orientation 方向（BUTTON_ORIENTATION_HORIZONTAL / BUTTON_ORIENTATION_VERTICAL）
+     */
+    public void setCustomButtonOrientation(String orientation) {
+        prefs.edit().putString(KEY_CUSTOM_BUTTON_ORIENTATION, orientation).apply();
+        AppLog.d(TAG, "按钮布局方向设置: " + orientation);
+    }
+    
+    /**
+     * 获取按钮布局方向
+     * @return 布局方向，默认为横版
+     */
+    public String getCustomButtonOrientation() {
+        return prefs.getString(KEY_CUSTOM_BUTTON_ORIENTATION, BUTTON_ORIENTATION_HORIZONTAL);
+    }
+    
+    /**
+     * 保存自定义布局数据（JSON格式）
+     * @param layoutDataJson 布局数据JSON字符串
+     */
+    public void setCustomLayoutData(String layoutDataJson) {
+        prefs.edit().putString(KEY_CUSTOM_LAYOUT_DATA, layoutDataJson).apply();
+        AppLog.d(TAG, "自定义布局数据已保存");
+    }
+    
+    /**
+     * 获取自定义布局数据
+     * @return 布局数据JSON字符串，如果未设置返回null
+     */
+    public String getCustomLayoutData() {
+        return prefs.getString(KEY_CUSTOM_LAYOUT_DATA, null);
+    }
+    
+    /**
+     * 清除自定义布局数据
+     */
+    public void clearCustomLayoutData() {
+        prefs.edit().remove(KEY_CUSTOM_LAYOUT_DATA).apply();
+        AppLog.d(TAG, "自定义布局数据已清除");
+    }
+    
+    /**
+     * 根据旋转角度计算实际显示比例
+     * @param width 原始宽度
+     * @param height 原始高度
+     * @param rotation 旋转角度 (0/90/180/270)
+     * @return [displayWidth, displayHeight]
+     */
+    public static int[] calculateDisplayRatio(int width, int height, int rotation) {
+        if (rotation == 90 || rotation == 270) {
+            // 旋转90°或270°时，宽高互换
+            return new int[]{height, width};
+        }
+        return new int[]{width, height};
+    }
+    
+    /**
+     * 获取按钮样式的显示名称
+     */
+    public static String getButtonStyleDisplayName(String style) {
+        if (BUTTON_STYLE_MULTI.equals(style)) {
+            return "多按钮";
+        }
+        return "标准";
+    }
+    
+    /**
+     * 获取按钮方向的显示名称
+     */
+    public static String getButtonOrientationDisplayName(String orientation) {
+        if (BUTTON_ORIENTATION_VERTICAL.equals(orientation)) {
+            return "竖版";
+        }
+        return "横版";
     }
 }

@@ -130,6 +130,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     // 车型配置相关
     private AppConfig appConfig;
     private int configuredCameraCount = 4;  // 配置的摄像头数量
+    private CustomLayoutManager customLayoutManager;  // 自定义车型布局管理器
 
     // 录制按钮闪烁动画相关
     private android.os.Handler blinkHandler;
@@ -139,6 +140,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     // 录制状态显示相关
     private TextView tvRecordingStats;
     private android.os.Handler recordingTimerHandler;
+
     private Runnable recordingTimerRunnable;
     private long recordingStartTime = 0;  // 录制开始时间
     private int currentSegmentCount = 1;  // 当前分段数
@@ -920,41 +922,12 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             requiredTextureCount = 2;
             AppLog.d(TAG, "使用手机配置：自适应2摄像头布局");
         }
-        // 自定义车型：根据配置选择布局
+        // 自定义车型：使用统一的自定义布局（支持自由操控）
         else if (appConfig.isCustomCarModel()) {
+            layoutId = R.layout.activity_main_custom;
             configuredCameraCount = appConfig.getCameraCount();
-            String orientation = appConfig.getScreenOrientation();
-
-            switch (configuredCameraCount) {
-                case 1:
-                    layoutId = R.layout.activity_main_1cam;
-                    requiredTextureCount = 1;
-                    AppLog.d(TAG, "使用自定义车型：1摄像头布局");
-                    break;
-                case 2:
-                    layoutId = R.layout.activity_main_2cam;
-                    requiredTextureCount = 2;
-                    AppLog.d(TAG, "使用自定义车型：2摄像头布局");
-                    break;
-                case 4:
-                    // 4摄像头：根据屏幕方向选择布局
-                    if ("portrait".equals(orientation)) {
-                        layoutId = R.layout.activity_main_4cam_portrait;
-                        AppLog.d(TAG, "使用自定义车型：4摄像头竖屏布局");
-                    } else {
-                        layoutId = R.layout.activity_main_4cam;
-                        AppLog.d(TAG, "使用自定义车型：4摄像头横屏布局");
-                    }
-                    requiredTextureCount = 4;
-                    break;
-                default:
-                    // 无效的摄像头数量，使用自定义4摄像头横屏布局
-                    layoutId = R.layout.activity_main_4cam;
-                    configuredCameraCount = 4;
-                    requiredTextureCount = 4;
-                    AppLog.d(TAG, "使用自定义车型：4摄像头横屏布局（默认）");
-                    break;
-            }
+            requiredTextureCount = configuredCameraCount;
+            AppLog.d(TAG, "使用自定义车型布局：" + configuredCameraCount + "摄像头");
         }
         // 银河E5：横屏四摄像头布局
         else {
@@ -1038,6 +1011,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         
         // 更新摄像头标签（如果是自定义车型）
         updateCameraLabels();
+
+        // 初始化自定义布局管理器（如果是自定义车型）
+        initCustomLayoutManager();
 
         // 菜单按钮点击事件（部分布局可能没有此按钮）
         View btnMenu = findViewById(R.id.btn_menu);
@@ -1172,6 +1148,172 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         } else {
             label.setText(name);
             label.setVisibility(View.VISIBLE);
+        }
+    }
+
+    /**
+     * 初始化自定义布局管理器（仅在自定义车型时有效）
+     * 业务逻辑委托给 CustomLayoutManager 处理
+     */
+    private void initCustomLayoutManager() {
+        if (!appConfig.isCustomCarModel()) {
+            return;
+        }
+
+        // 获取视图引用
+        android.widget.FrameLayout frameFront = findViewById(R.id.frame_front);
+        android.widget.FrameLayout frameBack = findViewById(R.id.frame_back);
+        android.widget.FrameLayout frameLeft = findViewById(R.id.frame_left);
+        android.widget.FrameLayout frameRight = findViewById(R.id.frame_right);
+        View editControls = findViewById(R.id.edit_controls);
+        View containerCameras = findViewById(R.id.container_cameras);
+        
+        // 按钮容器根据方向选择
+        String buttonOrientation = appConfig.getCustomButtonOrientation();
+        boolean isVertical = AppConfig.BUTTON_ORIENTATION_VERTICAL.equals(buttonOrientation);
+        android.view.ViewGroup buttonContainer = isVertical ? 
+            findViewById(R.id.container_buttons_left) : 
+            findViewById(R.id.container_buttons_bottom);
+
+        // 根据摄像头数量隐藏不需要的容器
+        if (configuredCameraCount < 4) {
+            if (frameLeft != null) frameLeft.setVisibility(View.GONE);
+            if (frameRight != null) frameRight.setVisibility(View.GONE);
+        }
+        if (configuredCameraCount < 2) {
+            if (frameBack != null) frameBack.setVisibility(View.GONE);
+        }
+
+        // 动态加载按钮布局
+        setupCustomButtonLayout(buttonContainer);
+
+        // 初始化布局管理器（所有业务逻辑由 Manager 处理）
+        customLayoutManager = new CustomLayoutManager(this);
+        customLayoutManager.setCameraCount(configuredCameraCount);
+        customLayoutManager.setOnButtonLayoutChangeListener(orientation -> {
+            // 重新加载按钮布局
+            android.view.ViewGroup newContainer = orientation.equals(AppConfig.BUTTON_ORIENTATION_VERTICAL) ?
+                    findViewById(R.id.container_buttons_left) : findViewById(R.id.container_buttons_bottom);
+            setupCustomButtonLayout(newContainer);
+            
+            // 更新布局管理器中的按钮容器引用
+            customLayoutManager.updateButtonContainer(newContainer);
+        });
+        customLayoutManager.setupFloatingViews(
+                frameFront, frameBack, frameLeft, frameRight, 
+                buttonContainer, editControls, containerCameras,
+                textureFront, textureBack, textureLeft, textureRight);
+
+        AppLog.d(TAG, "自定义布局管理器初始化完成");
+    }
+
+    /**
+     * 设置自定义按钮布局
+     * 根据配置动态加载按钮样式和方向
+     */
+    private void setupCustomButtonLayout(android.view.ViewGroup ignoredContainer) {
+        // 获取配置
+        String buttonStyle = appConfig.getCustomButtonStyle();
+        String buttonOrientation = appConfig.getCustomButtonOrientation();
+        boolean isVertical = AppConfig.BUTTON_ORIENTATION_VERTICAL.equals(buttonOrientation);
+        
+        AppLog.d(TAG, "按钮配置读取: style=" + buttonStyle + " (standard=" + AppConfig.BUTTON_STYLE_STANDARD + "), orientation=" + buttonOrientation);
+        
+        // 获取两个按钮容器
+        android.widget.FrameLayout leftContainer = findViewById(R.id.container_buttons_left);
+        android.widget.FrameLayout bottomContainer = findViewById(R.id.container_buttons_bottom);
+        
+        if (leftContainer == null || bottomContainer == null) {
+            AppLog.e(TAG, "Button containers not found");
+            return;
+        }
+        
+        // 清除两个容器
+        leftContainer.removeAllViews();
+        bottomContainer.removeAllViews();
+        
+        // 选择布局资源
+        int layoutResId;
+        boolean isStandard = AppConfig.BUTTON_STYLE_STANDARD.equals(buttonStyle);
+        AppLog.d(TAG, "按钮样式判断: buttonStyle='" + buttonStyle + "', STANDARD='" + AppConfig.BUTTON_STYLE_STANDARD + "', isStandard=" + isStandard);
+        
+        if (isStandard) {
+            // 标准按钮（E5风格图标按钮）
+            layoutResId = isVertical ? 
+                R.layout.layout_custom_buttons_standard_vertical : 
+                R.layout.layout_custom_buttons_standard;
+            AppLog.d(TAG, ">>> 使用标准按钮布局(图标) - " + (isVertical ? "竖版" : "横版") + ", layoutResId=" + layoutResId);
+        } else {
+            // 多按钮（文字按钮）
+            layoutResId = isVertical ? 
+                R.layout.layout_custom_buttons_multi_vertical : 
+                R.layout.layout_custom_buttons_multi;
+            AppLog.d(TAG, ">>> 使用多按钮布局(文字) - " + (isVertical ? "竖版" : "横版") + ", layoutResId=" + layoutResId);
+        }
+        
+        // 加载布局到正确的容器
+        android.view.LayoutInflater inflater = android.view.LayoutInflater.from(this);
+        View buttonsView = inflater.inflate(layoutResId, null, false);
+        
+        android.view.ViewGroup targetContainer;
+        if (isVertical) {
+            // 竖版：按钮在左侧
+            leftContainer.addView(buttonsView);
+            leftContainer.setVisibility(View.VISIBLE);
+            bottomContainer.setVisibility(View.GONE);
+            targetContainer = leftContainer;
+        } else {
+            // 横版：按钮在底部
+            bottomContainer.addView(buttonsView);
+            bottomContainer.setVisibility(View.VISIBLE);
+            leftContainer.setVisibility(View.GONE);
+            targetContainer = bottomContainer;
+        }
+
+        // 重新获取按钮引用
+        btnStartRecord = targetContainer.findViewById(R.id.btn_start_record);
+        btnExit = targetContainer.findViewById(R.id.btn_exit);
+        btnTakePhoto = targetContainer.findViewById(R.id.btn_take_photo);
+
+        // 设置按钮点击事件
+        if (btnStartRecord != null) {
+            btnStartRecord.setOnClickListener(v -> toggleRecording());
+        }
+        if (btnExit != null) {
+            btnExit.setOnClickListener(v -> exitApp());
+        }
+        if (btnTakePhoto != null) {
+            btnTakePhoto.setOnClickListener(v -> takePicture());
+        }
+
+        // 设置其他快捷按钮
+        View btnVideoPlayback = targetContainer.findViewById(R.id.btn_video_playback);
+        if (btnVideoPlayback != null) {
+            btnVideoPlayback.setOnClickListener(v -> showPlaybackInterface());
+        }
+
+        View btnPhotoPlayback = targetContainer.findViewById(R.id.btn_photo_playback);
+        if (btnPhotoPlayback != null) {
+            btnPhotoPlayback.setOnClickListener(v -> showPhotoPlaybackInterface());
+        }
+
+        View btnSettings = targetContainer.findViewById(R.id.btn_settings);
+        if (btnSettings != null) {
+            btnSettings.setOnClickListener(v -> showSettingsInterface());
+        }
+        
+        // 菜单按钮（标准按钮样式有此按钮）
+        View btnMenu = targetContainer.findViewById(R.id.btn_menu);
+        if (btnMenu != null) {
+            btnMenu.setOnClickListener(v -> {
+                if (drawerLayout != null) {
+                    if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                        drawerLayout.closeDrawer(GravityCompat.START);
+                    } else {
+                        drawerLayout.openDrawer(GravityCompat.START);
+                    }
+                }
+            });
         }
     }
     
@@ -2203,43 +2345,68 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                         break;
                 }
                 if (textureView != null) {
-                    // 判断是否需要旋转
-                    boolean needRotation = "left".equals(cameraKey) || "right".equals(cameraKey);
-
-                    if (needRotation) {
-                        // 左右摄像头：容器使用旋转后的宽高比（800x1280，竖向）
-                        textureView.setAspectRatio(previewSize.getHeight(), previewSize.getWidth());
-                        AppLog.d(TAG, "设置 " + cameraKey + " 宽高比(旋转后): " + previewSize.getHeight() + ":" + previewSize.getWidth());
-
-                        // 应用旋转变换（修正倒立问题）
-                        int rotation = "left".equals(cameraKey) ? 270 : 90;  // 左顺时针270度(270)，右顺时针90度(90)
-                        applyRotationTransform(textureView, previewSize, rotation, cameraKey);
-                    } else {
-                        // 前后摄像头
-                        String carModel = appConfig.getCarModel();
+                    String carModel = appConfig.getCarModel();
+                    
+                    // 自定义车型：保持原始状态，不旋转、不镜像，所有调节在自由调节界面进行
+                    if (appConfig.isCustomCarModel()) {
+                        // 使用原始宽高比，不应用任何旋转
+                        textureView.setAspectRatio(previewSize.getWidth(), previewSize.getHeight());
+                        textureView.setFillContainer(true);  // 使用填充模式，无黑边
                         
-                        // 手机车型：预览是竖向的，需要应用缩放变换保持比例
-                        if (AppConfig.CAR_MODEL_PHONE.equals(carModel)) {
-                            // 手机竖屏模式：应用缩放变换保持宽高比
-                            textureView.setFillContainer(false);
-                            applyPhoneScaleTransform(textureView, previewSize, cameraKey);
-                            AppLog.d(TAG, "设置 " + cameraKey + " 手机缩放变换, 预览尺寸: " + previewSize.getWidth() + "x" + previewSize.getHeight());
+                        AppLog.d(TAG, "设置 " + cameraKey + " 宽高比(自定义-填充): " + previewSize.getWidth() + "x" + previewSize.getHeight());
+                        
+                        // 更新布局管理器中的宽高比信息（不旋转）
+                        if (customLayoutManager != null) {
+                            customLayoutManager.updateCameraAspectRatio(cameraKey, previewSize.getWidth(), previewSize.getHeight(), 0);
+                        }
+                    }
+                    // L7/L6车型：左右摄像头需要旋转
+                    else if (AppConfig.CAR_MODEL_L7.equals(carModel) || AppConfig.CAR_MODEL_L7_MULTI.equals(carModel)) {
+                        boolean needRotation = "left".equals(cameraKey) || "right".equals(cameraKey);
+                        
+                        if (needRotation) {
+                            // 左右摄像头：容器使用旋转后的宽高比（800x1280，竖向）
+                            textureView.setAspectRatio(previewSize.getHeight(), previewSize.getWidth());
+                            AppLog.d(TAG, "设置 " + cameraKey + " 宽高比(旋转后): " + previewSize.getHeight() + ":" + previewSize.getWidth());
+
+                            // 应用旋转变换（修正倒立问题）
+                            int rotation = "left".equals(cameraKey) ? 270 : 90;
+                            applyRotationTransform(textureView, previewSize, rotation, cameraKey);
                         } else {
-                            // 其他车型：使用原始宽高比（1280x800，横向）
+                            // 前后摄像头：使用原始宽高比
+                            textureView.setAspectRatio(previewSize.getWidth(), previewSize.getHeight());
+                            textureView.setFillContainer(false);
+                            AppLog.d(TAG, "设置 " + cameraKey + " 宽高比: " + previewSize.getWidth() + ":" + previewSize.getHeight() + ", 适应模式");
+                        }
+                    }
+                    // 手机车型：预览是竖向的，需要应用缩放变换保持比例
+                    else if (AppConfig.CAR_MODEL_PHONE.equals(carModel)) {
+                        textureView.setFillContainer(false);
+                        applyPhoneScaleTransform(textureView, previewSize, cameraKey);
+                        AppLog.d(TAG, "设置 " + cameraKey + " 手机缩放变换, 预览尺寸: " + previewSize.getWidth() + "x" + previewSize.getHeight());
+                    }
+                    // 其他车型（E5等）：左右摄像头也需要旋转
+                    else {
+                        boolean needRotation = "left".equals(cameraKey) || "right".equals(cameraKey);
+                        
+                        if (needRotation) {
+                            // 左右摄像头：容器使用旋转后的宽高比（800x1280，竖向）
+                            textureView.setAspectRatio(previewSize.getHeight(), previewSize.getWidth());
+                            AppLog.d(TAG, "设置 " + cameraKey + " 宽高比(E5旋转后): " + previewSize.getHeight() + ":" + previewSize.getWidth());
+
+                            // 应用旋转变换（修正倒立问题）
+                            int rotation = "left".equals(cameraKey) ? 270 : 90;
+                            applyRotationTransform(textureView, previewSize, rotation, cameraKey);
+                        } else {
+                            // 前后摄像头：使用原始宽高比
                             textureView.setAspectRatio(previewSize.getWidth(), previewSize.getHeight());
                             
-                            // 根据车型和摄像头数量决定显示模式
-                            // L7车型（包括L7-多按钮）和1摄/2摄模式：使用适应模式，完整显示画面
                             // E5的4摄模式：启用填满模式，避免黑边
-                            boolean isL7Layout = AppConfig.CAR_MODEL_L7.equals(carModel) || AppConfig.CAR_MODEL_L7_MULTI.equals(carModel);
-                            boolean useFillMode = configuredCameraCount >= 4 && !isL7Layout;
-                            
+                            boolean useFillMode = configuredCameraCount >= 4;
                             if (useFillMode) {
-                                // 4摄模式（E5）：启用填满模式，避免黑边
                                 textureView.setFillContainer(true);
                                 AppLog.d(TAG, "设置 " + cameraKey + " 宽高比: " + previewSize.getWidth() + ":" + previewSize.getHeight() + ", 填满模式");
                             } else {
-                                // L7车型或1摄/2摄模式：使用适应模式，完整显示画面
                                 textureView.setFillContainer(false);
                                 AppLog.d(TAG, "设置 " + cameraKey + " 宽高比: " + previewSize.getWidth() + ":" + previewSize.getHeight() + ", 适应模式");
                             }
@@ -2556,31 +2723,28 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
 
     /**
      * 为自定义车型的摄像头设置旋转角度
+     * 注意：自定义布局默认不旋转、不镜像，所有调节在自由调节界面进行
      */
     private void setCustomRotationForCameras() {
         if (!appConfig.isCustomCarModel()) {
             return;  // 只对自定义车型应用
         }
 
-        // 获取并设置每个摄像头的旋转角度
-        int frontRotation = appConfig.getCameraRotation("front");
-        int backRotation = appConfig.getCameraRotation("back");
-        int leftRotation = appConfig.getCameraRotation("left");
-        int rightRotation = appConfig.getCameraRotation("right");
-
-        AppLog.d(TAG, "设置自定义旋转角度 - 前:" + frontRotation + "° 后:" + backRotation + "° 左:" + leftRotation + "° 右:" + rightRotation + "°");
-
-        // 为每个摄像头设置旋转角度
+        // 自定义布局：默认不应用任何旋转，保持原始状态
+        // 所有旋转、镜像等调节都在自由调节界面进行
+        AppLog.d(TAG, "自定义车型：保持摄像头原始状态，不应用自动旋转");
+        
+        // 明确设置所有摄像头旋转为0
         if (cameraManager != null) {
             SingleCamera frontCamera = cameraManager.getCamera("front");
             SingleCamera backCamera = cameraManager.getCamera("back");
             SingleCamera leftCamera = cameraManager.getCamera("left");
             SingleCamera rightCamera = cameraManager.getCamera("right");
 
-            if (frontCamera != null) frontCamera.setCustomRotation(frontRotation);
-            if (backCamera != null) backCamera.setCustomRotation(backRotation);
-            if (leftCamera != null) leftCamera.setCustomRotation(leftRotation);
-            if (rightCamera != null) rightCamera.setCustomRotation(rightRotation);
+            if (frontCamera != null) frontCamera.setCustomRotation(0);
+            if (backCamera != null) backCamera.setCustomRotation(0);
+            if (leftCamera != null) leftCamera.setCustomRotation(0);
+            if (rightCamera != null) rightCamera.setCustomRotation(0);
         }
     }
 
