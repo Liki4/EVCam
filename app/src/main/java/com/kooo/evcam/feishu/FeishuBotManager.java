@@ -75,6 +75,22 @@ public class FeishuBotManager {
         String onStartRecordingCommand();
         String onStopRecordingCommand();
         String onExitCommand(boolean confirmed);
+        
+        /**
+         * 切换到前台
+         * @return 执行结果消息
+         */
+        default String onForegroundCommand() {
+            return "功能不可用";
+        }
+        
+        /**
+         * 切换到后台
+         * @return 执行结果消息
+         */
+        default String onBackgroundCommand() {
+            return "功能不可用";
+        }
     }
 
     public FeishuBotManager(Context context, FeishuConfig config,
@@ -513,6 +529,26 @@ public class FeishuBotManager {
                     sendReply(chatId, messageId, chatType, "❌ 功能不可用");
                 }
 
+            } else if ("前台".equals(command) || "foreground".equalsIgnoreCase(command)) {
+                // 前台指令：将应用切换到前台
+                AppLog.d(TAG, "收到前台指令");
+                if (currentCommandCallback != null) {
+                    String result = currentCommandCallback.onForegroundCommand();
+                    sendReply(chatId, messageId, chatType, result);
+                } else {
+                    sendReply(chatId, messageId, chatType, "❌ 功能不可用");
+                }
+
+            } else if ("后台".equals(command) || "background".equalsIgnoreCase(command)) {
+                // 后台指令：将应用切换到后台
+                AppLog.d(TAG, "收到后台指令");
+                if (currentCommandCallback != null) {
+                    String result = currentCommandCallback.onBackgroundCommand();
+                    sendReply(chatId, messageId, chatType, result);
+                } else {
+                    sendReply(chatId, messageId, chatType, "❌ 功能不可用");
+                }
+
             } else if ("帮助".equals(command) || "help".equalsIgnoreCase(command)) {
                 sendReply(chatId, messageId, chatType,
                     "📋 EVCam 远程控制\n" +
@@ -525,6 +561,9 @@ public class FeishuBotManager {
                     "• 结束录制 - 停止录制\n\n" +
                     "📷 拍照\n" +
                     "• 拍照 - 拍摄照片\n\n" +
+                    "🔄 前后台切换\n" +
+                    "• 前台 - 切换到前台\n" +
+                    "• 后台 - 切换到后台\n\n" +
                     "ℹ️ 其他\n" +
                     "• 状态 - 查看应用状态\n" +
                     "• 退出 - 退出应用\n" +

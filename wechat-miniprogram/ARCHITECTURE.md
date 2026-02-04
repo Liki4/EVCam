@@ -26,11 +26,11 @@
 
 ```java
 // 小程序凭证（替换为您的小程序信息）
-private static final String APP_ID = "wx1df526b63078a9e5";
-private static final String APP_SECRET = "7b6fd801e42004289cb831c6b85f52d9";
+private static final String APP_ID = "wx1******************";
+private static final String APP_SECRET = "7b6fd****************";
 
 // 云开发环境ID（在微信开发者工具中创建）
-private static final String CLOUD_ENV = "cloudbase-0gt2twhpdc512c30";
+private static final String CLOUD_ENV = "cloudbase-******************";
 
 // 微信API地址
 private static final String TOKEN_URL = "https://api.weixin.qq.com/cgi-bin/token";

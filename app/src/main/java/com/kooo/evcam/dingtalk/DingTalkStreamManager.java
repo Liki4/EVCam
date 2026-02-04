@@ -83,6 +83,22 @@ public class DingTalkStreamManager {
         default String onExitCommand(boolean confirmed) {
             return "功能不可用";
         }
+        
+        /**
+         * 切换到前台
+         * @return 执行结果消息
+         */
+        default String onForegroundCommand() {
+            return "功能不可用";
+        }
+        
+        /**
+         * 切换到后台
+         * @return 执行结果消息
+         */
+        default String onBackgroundCommand() {
+            return "功能不可用";
+        }
     }
 
     public DingTalkStreamManager(Context context, DingTalkConfig config,
@@ -387,10 +403,32 @@ public class DingTalkStreamManager {
                         sendResponse(sessionWebhook, "❌ 功能不可用");
                     }
 
+                } else if ("前台".equals(command) || "foreground".equalsIgnoreCase(command)) {
+                    // 前台指令：将应用切换到前台
+                    AppLog.d(TAG, "收到前台指令");
+                    if (commandCallback != null) {
+                        String result = commandCallback.onForegroundCommand();
+                        sendResponse(sessionWebhook, result);
+                    } else {
+                        sendResponse(sessionWebhook, "❌ 功能不可用");
+                    }
+
+                } else if ("后台".equals(command) || "background".equalsIgnoreCase(command)) {
+                    // 后台指令：将应用切换到后台
+                    AppLog.d(TAG, "收到后台指令");
+                    if (commandCallback != null) {
+                        String result = commandCallback.onBackgroundCommand();
+                        sendResponse(sessionWebhook, result);
+                    } else {
+                        sendResponse(sessionWebhook, "❌ 功能不可用");
+                    }
+
                 } else if ("帮助".equals(command) || "help".equalsIgnoreCase(command)) {
                     sendResponse(sessionWebhook,
                         "可用指令：\n" +
                         "• 状态 - 查看应用状态\n" +
+                        "• 前台 - 将应用切换到前台\n" +
+                        "• 后台 - 将应用切换到后台\n" +
                         "• 启动录制 - 开始持续录制\n" +
                         "• 结束录制 - 停止录制并退到后台\n" +
                         "• 录制 - 录制 60 秒视频\n" +

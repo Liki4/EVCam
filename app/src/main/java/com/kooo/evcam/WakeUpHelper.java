@@ -232,6 +232,7 @@ public class WakeUpHelper {
 
         // 传递命令参数
         intent.putExtra("remote_action", action);
+        intent.putExtra("remote_wake_up", true);  // 标记这是从后台唤醒的
         intent.putExtra("remote_conversation_id", conversationId);
         intent.putExtra("remote_conversation_type", conversationType);
         intent.putExtra("remote_user_id", userId);
@@ -272,6 +273,48 @@ public class WakeUpHelper {
         launchMainActivityWithCommand(context, "stop_recording", null, null, null, 0);
     }
 
+    /**
+     * 启动 MainActivity 切换到前台
+     * 用于远程指令将应用带到前台
+     */
+    public static void launchForForeground(Context context) {
+        AppLog.d(TAG, "Launching MainActivity to foreground");
+        
+        // 获取CPU唤醒锁
+        acquireCpuWakeLock(context);
+
+        Intent intent = new Intent(context, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
+                Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                Intent.FLAG_ACTIVITY_SINGLE_TOP);
+
+        // 传递前台命令参数
+        intent.putExtra("remote_action", "foreground");
+        intent.putExtra("remote_wake_up", true);
+
+        context.startActivity(intent);
+        AppLog.d(TAG, "MainActivity launch intent sent for foreground");
+    }
+
+    /**
+     * 发送广播通知 MainActivity 切换到后台
+     * 使用广播而不是 startActivity，避免 Activity 闪烁到前台
+     */
+    public static void sendBackgroundBroadcast(Context context) {
+        AppLog.d(TAG, "Sending background broadcast to MainActivity");
+
+        Intent intent = new Intent(ACTION_MOVE_TO_BACKGROUND);
+        intent.setPackage(context.getPackageName());
+        context.sendBroadcast(intent);
+        
+        AppLog.d(TAG, "Background broadcast sent");
+    }
+    
+    /**
+     * 后台切换广播 Action
+     */
+    public static final String ACTION_MOVE_TO_BACKGROUND = "com.kooo.evcam.ACTION_MOVE_TO_BACKGROUND";
+
     // ==================== Telegram 相关方法 ====================
 
     /**
@@ -293,6 +336,7 @@ public class WakeUpHelper {
 
         // 传递 Telegram 命令参数
         intent.putExtra("remote_action", "record");
+        intent.putExtra("remote_wake_up", true);  // 标记这是从后台唤醒的
         intent.putExtra("remote_source", "telegram");
         intent.putExtra("telegram_chat_id", chatId);
         intent.putExtra("remote_duration", durationSeconds);
@@ -319,6 +363,7 @@ public class WakeUpHelper {
 
         // 传递 Telegram 命令参数
         intent.putExtra("remote_action", "photo");
+        intent.putExtra("remote_wake_up", true);  // 标记这是从后台唤醒的
         intent.putExtra("remote_source", "telegram");
         intent.putExtra("telegram_chat_id", chatId);
 
@@ -348,6 +393,7 @@ public class WakeUpHelper {
 
         // 传递飞书命令参数
         intent.putExtra("remote_action", "record");
+        intent.putExtra("remote_wake_up", true);  // 标记这是从后台唤醒的
         intent.putExtra("remote_source", "feishu");
         intent.putExtra("feishu_chat_id", chatId);
         intent.putExtra("feishu_message_id", messageId);
@@ -376,6 +422,7 @@ public class WakeUpHelper {
 
         // 传递飞书命令参数
         intent.putExtra("remote_action", "photo");
+        intent.putExtra("remote_wake_up", true);  // 标记这是从后台唤醒的
         intent.putExtra("remote_source", "feishu");
         intent.putExtra("feishu_chat_id", chatId);
         intent.putExtra("feishu_message_id", messageId);
@@ -405,6 +452,7 @@ public class WakeUpHelper {
 
         // 传递微信命令参数
         intent.putExtra("remote_action", "record");
+        intent.putExtra("remote_wake_up", true);  // 标记这是从后台唤醒的
         intent.putExtra("remote_source", "wechat");
         intent.putExtra("wechat_command_id", commandId);
         intent.putExtra("remote_duration", durationSeconds);
@@ -431,6 +479,7 @@ public class WakeUpHelper {
 
         // 传递微信命令参数
         intent.putExtra("remote_action", "photo");
+        intent.putExtra("remote_wake_up", true);  // 标记这是从后台唤醒的
         intent.putExtra("remote_source", "wechat");
         intent.putExtra("wechat_command_id", commandId);
 
@@ -455,6 +504,7 @@ public class WakeUpHelper {
 
         // 传递微信命令参数
         intent.putExtra("remote_action", "start_preview");
+        intent.putExtra("remote_wake_up", true);  // 标记这是从后台唤醒的
         intent.putExtra("remote_source", "wechat");
 
         context.startActivity(intent);
@@ -475,6 +525,7 @@ public class WakeUpHelper {
 
         // 传递微信命令参数
         intent.putExtra("remote_action", "stop_preview");
+        intent.putExtra("remote_wake_up", true);  // 标记这是从后台唤醒的
         intent.putExtra("remote_source", "wechat");
 
         context.startActivity(intent);

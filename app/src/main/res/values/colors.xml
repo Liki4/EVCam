@@ -47,6 +47,13 @@
     <!-- 多选模式选中背景 - 日间模式 -->
     <color name="item_selected_background">#40000000</color>
 
+    <!-- 视频预览区配色 - 日间模式（使用页面底色） -->
+    <color name="preview_background">@color/page_background</color>
+    <color name="preview_frame_background">#FFC0C8D0</color>
+    <color name="preview_grid_divider">@color/page_background</color>
+    <color name="preview_placeholder_text">#FF666666</color>
+    <color name="preview_controls_background">@color/page_background</color>
+
     <!-- 使用提示对话框配色 - 日间模式 -->
     <color name="dialog_guide_background">#FFFFFF</color>
     <color name="dialog_guide_title">#1A1A1A</color>

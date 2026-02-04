@@ -24,6 +24,18 @@ public class VideoRecorder {
     private static final String TAG = "VideoRecorder";
 
     /**
+     * 分段时间戳提供者接口
+     * 用于多路摄像头分段切换时使用统一的时间戳
+     */
+    public interface SegmentTimestampProvider {
+        /**
+         * 获取当前分段的统一时间戳
+         * @return 时间戳字符串，格式为 yyyyMMdd_HHmmss
+         */
+        String getSegmentTimestamp();
+    }
+
+    /**
      * 录制状态枚举 - 用于解决分段切换和停止录制的竞态条件
      */
     public enum RecordingState {
@@ -77,6 +89,7 @@ public class VideoRecorder {
     private int segmentIndex = 0;
     private String saveDirectory;  // 保存目录
     private String cameraPosition;  // 摄像头位置（front/back/left/right）
+    private SegmentTimestampProvider timestampProvider;  // 分段时间戳提供者（用于多路同步）
     private int recordWidth;
     private int recordHeight;
     private long lastFileSize = 0;  // 上次检查的文件大小
@@ -100,6 +113,15 @@ public class VideoRecorder {
 
     public void setCallback(RecordCallback callback) {
         this.callback = callback;
+    }
+
+    /**
+     * 设置分段时间戳提供者
+     * 用于多路摄像头分段切换时使用统一的时间戳，避免时间戳差1秒导致分组错误
+     * @param provider 时间戳提供者
+     */
+    public void setTimestampProvider(SegmentTimestampProvider provider) {
+        this.timestampProvider = provider;
     }
 
     /**
@@ -428,10 +450,21 @@ public class VideoRecorder {
     }
 
     /**
-     * 生成新的分段文件路径（使用当前时间戳）
+     * 生成新的分段文件路径
+     * 优先使用 TimestampProvider 获取统一时间戳（多路摄像头同步）
+     * 如果没有设置 provider，则使用当前时间
      */
     private String generateSegmentPath() {
-        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
+        String timestamp;
+        if (timestampProvider != null) {
+            // 使用统一的时间戳提供者（确保多路摄像头使用相同时间戳）
+            timestamp = timestampProvider.getSegmentTimestamp();
+            AppLog.d(TAG, "Camera " + cameraId + " using provider timestamp: " + timestamp);
+        } else {
+            // 回退到独立生成时间戳（兼容旧逻辑）
+            timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
+            AppLog.d(TAG, "Camera " + cameraId + " using local timestamp: " + timestamp);
+        }
         String fileName = timestamp + "_" + cameraPosition + ".mp4";
         return new File(saveDirectory, fileName).getAbsolutePath();
     }

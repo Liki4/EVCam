@@ -179,7 +179,7 @@ miniprogram-code/
 
 ```javascript
 wx.cloud.init({
-  env: 'cloudbase-0gt2twhpdc512c30',  // 云开发环境ID
+  env: 'cloudbase-******************',  // 云开发环境ID
   traceUser: true,
 });
 ```

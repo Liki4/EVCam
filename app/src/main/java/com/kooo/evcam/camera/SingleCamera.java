@@ -1780,6 +1780,48 @@ public class SingleCamera {
     }
 
     /**
+     * 获取当前 TextureView（用于心跳推图等功能）
+     */
+    public TextureView getTextureView() {
+        return textureView;
+    }
+
+    /**
+     * 实时捕获当前画面（不保存文件）
+     * 用于心跳推图等需要实时获取图片的功能
+     * 注意：必须在主线程调用
+     * 
+     * @return 当前画面的 Bitmap，失败返回 null（调用方负责回收）
+     */
+    public android.graphics.Bitmap captureBitmap() {
+        if (textureView == null || !textureView.isAvailable()) {
+            AppLog.w(TAG, "Camera " + cameraId + " TextureView not available for capture");
+            return null;
+        }
+
+        if (previewSize == null) {
+            AppLog.w(TAG, "Camera " + cameraId + " preview size not available for capture");
+            return null;
+        }
+
+        try {
+            android.graphics.Bitmap bitmap = textureView.getBitmap(
+                    previewSize.getWidth(),
+                    previewSize.getHeight()
+            );
+            
+            if (bitmap != null) {
+                AppLog.d(TAG, "Camera " + cameraId + " captured bitmap: " + 
+                        bitmap.getWidth() + "x" + bitmap.getHeight());
+            }
+            return bitmap;
+        } catch (Exception e) {
+            AppLog.e(TAG, "Camera " + cameraId + " failed to capture bitmap", e);
+            return null;
+        }
+    }
+
+    /**
      * 拍照（自动生成时间戳）
      */
     public void takePicture() {

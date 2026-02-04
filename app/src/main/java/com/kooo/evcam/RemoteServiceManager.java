@@ -393,6 +393,19 @@ public class RemoteServiceManager {
                     }
                     return "⚠️ 发送「确认退出」执行退出操作";
                 }
+
+                @Override
+                public String onForegroundCommand() {
+                    WakeUpHelper.launchForForeground(context);
+                    return "📱 应用已切换到前台";
+                }
+
+                @Override
+                public String onBackgroundCommand() {
+                    // 使用广播通知 Activity 退后台，避免启动 Activity 导致闪屏
+                    WakeUpHelper.sendBackgroundBroadcast(context);
+                    return "📴 应用已切换到后台";
+                }
             };
 
             DingTalkStreamManager streamManager = new DingTalkStreamManager(context, config, apiClient, connectionCallback);
@@ -484,6 +497,19 @@ public class RemoteServiceManager {
                     }
                     return "⚠️ 发送「确认退出」执行退出操作";
                 }
+
+                @Override
+                public String onForegroundCommand() {
+                    WakeUpHelper.launchForForeground(context);
+                    return "📱 应用已切换到前台";
+                }
+
+                @Override
+                public String onBackgroundCommand() {
+                    // 使用广播通知 Activity 退后台，避免启动 Activity 导致闪屏
+                    WakeUpHelper.sendBackgroundBroadcast(context);
+                    return "📴 应用已切换到后台";
+                }
             };
 
             TelegramBotManager botManager = new TelegramBotManager(context, config, apiClient, connectionCallback);
@@ -573,6 +599,19 @@ public class RemoteServiceManager {
                         return "✅ EVCam 已退出";
                     }
                     return "⚠️ 发送「确认退出」执行退出操作";
+                }
+
+                @Override
+                public String onForegroundCommand() {
+                    WakeUpHelper.launchForForeground(context);
+                    return "📱 应用已切换到前台";
+                }
+
+                @Override
+                public String onBackgroundCommand() {
+                    // 使用广播通知 Activity 退后台，避免启动 Activity 导致闪屏
+                    WakeUpHelper.sendBackgroundBroadcast(context);
+                    return "📴 应用已切换到后台";
                 }
             };
 

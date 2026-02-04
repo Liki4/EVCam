@@ -20,8 +20,9 @@ android {
         applicationId = "com.kooo.evcam"
         minSdk = 28
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.9.9-test-02011810"
+        versionCode = 17
+        versionName = "1.0.4"
+
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

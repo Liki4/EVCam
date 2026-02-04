@@ -328,7 +328,7 @@ public class WechatMiniFragment extends Fragment implements WechatRemoteManager.
     }
 
     /**
-     * 注册 UI 回调并启动服务
+     * 注册 UI 回调（不自动启动服务，需要手动点击启动）
      */
     private void registerAndStartService() {
         if (getActivity() instanceof MainActivity) {
@@ -339,12 +339,11 @@ public class WechatMiniFragment extends Fragment implements WechatRemoteManager.
                 // 注册 UI 回调
                 remoteManager.setUICallback(this);
                 
-                // 如果服务未运行且已配置凭证，启动服务
-                if (!remoteManager.isRunning() && config.isCloudConfigured()) {
-                    remoteManager.startService();
-                } else if (remoteManager.isRunning()) {
-                    // 服务已运行，更新状态显示
+                // 只更新当前状态显示，不自动启动服务
+                if (remoteManager.isRunning()) {
                     updateServiceStatus(true);
+                } else {
+                    updateServiceStatus(false);
                 }
             }
         }

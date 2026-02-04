@@ -136,7 +136,7 @@ public class AppConfig {
     // 分辨率常量
     public static final String RESOLUTION_DEFAULT = "default";  // 默认（优先1280x800）
     public static final String RESOLUTION_2560X1600 = "2560x1600";  // 领克07/08默认分辨率
-    
+
     // 码率配置相关键名
     private static final String KEY_BITRATE_LEVEL = "bitrate_level";  // 码率等级
     
@@ -168,7 +168,32 @@ public class AppConfig {
     private static final String KEY_CAMERA_BACK_ROTATION = "camera_back_rotation";  // 后摄像头旋转角度
     private static final String KEY_CAMERA_LEFT_ROTATION = "camera_left_rotation";  // 左摄像头旋转角度
     private static final String KEY_CAMERA_RIGHT_ROTATION = "camera_right_rotation";  // 右摄像头旋转角度
-    
+    private static final String KEY_CAMERA_FRONT_MIRROR = "camera_front_mirror";  // 前摄像头镜像
+    private static final String KEY_CAMERA_BACK_MIRROR = "camera_back_mirror";  // 后摄像头镜像
+    private static final String KEY_CAMERA_LEFT_MIRROR = "camera_left_mirror";  // 左摄像头镜像
+    private static final String KEY_CAMERA_RIGHT_MIRROR = "camera_right_mirror";  // 右摄像头镜像
+
+    // 摄像头裁剪配置（每个方向的裁剪像素值）
+    private static final String KEY_CAMERA_CROP_PREFIX = "camera_crop_";  // 裁剪配置前缀
+
+    // 自定义车型自由操控配置
+    private static final String KEY_CUSTOM_FREE_CONTROL_ENABLED = "custom_free_control_enabled";  // 自由操控开关
+    private static final String KEY_CUSTOM_BUTTON_STYLE = "custom_button_style";  // 按钮样式（standard/multi）
+    private static final String KEY_CUSTOM_BUTTON_ORIENTATION = "custom_button_orientation";  // 按钮布局方向（horizontal/vertical）
+    private static final String KEY_CUSTOM_LAYOUT_DATA = "custom_layout_data";  // 布局位置数据（JSON格式）
+
+    // 按钮样式常量
+    public static final String BUTTON_STYLE_STANDARD = "standard";  // 标准按钮（E5风格）
+    public static final String BUTTON_STYLE_MULTI = "multi";        // 多按钮（L7-多按钮风格）
+
+    // 按钮方向常量
+    public static final String BUTTON_ORIENTATION_HORIZONTAL = "horizontal";  // 横版
+    public static final String BUTTON_ORIENTATION_VERTICAL = "vertical";      // 竖版
+
+    // 版本更新配置
+    private static final String KEY_UPDATE_SERVER_URL = "update_server_url";  // 更新服务器地址
+    private static final String DEFAULT_UPDATE_SERVER_URL = "https://evcam.suyunkai.top:9568/update/";  // 默认更新服务器
+
     // 车型常量
     public static final String CAR_MODEL_LYNKCO_07 = "lynkco_07";  // 领克07/08（默认车型）
     public static final String CAR_MODEL_LYNKCO_08_PLUS = "lynkco_08_plus";  // 领克08加包（4物理摄像头，避开camera0 AVM合成）
@@ -178,7 +203,8 @@ public class AppConfig {
     public static final String CAR_MODEL_L7_MULTI = "galaxy_l7_multi";  // 银河L7-多按钮
     public static final String CAR_MODEL_PHONE = "phone";  // 手机
     public static final String CAR_MODEL_CUSTOM = "custom";  // 自定义车型
-    
+    public static final String CAR_MODEL_XINGHAN_7 = "xinghan_7";  // 26款星舰7
+
     // 全景摄像头模式配置
     private static final String KEY_PANORAMA_MODE_ENABLED = "panorama_mode_enabled";  // 全景摄像头模式开关
     private static final String KEY_PANORAMIC_CAMERA_ID = "panoramic_camera_id";  // 全景摄像头ID
@@ -193,16 +219,16 @@ public class AppConfig {
     private static final String KEY_PANORAMIC_FISHEYE_CORRECTION = "panoramic_fisheye_correction";  // 全景模式鱼眼校正开关
     private static final String KEY_PANORAMIC_FISHEYE_STRENGTH = "panoramic_fisheye_strength";  // 全景模式鱼眼校正强度
     private static final String KEY_PANORAMIC_LAYOUT_MODE = "panoramic_layout_mode";  // 全景布局模式
-    
+
     // 全景布局模式常量
     public static final String PANORAMIC_LAYOUT_GRID = "grid";  // 网格布局（2x2）
     public static final String PANORAMIC_LAYOUT_HORIZONTAL = "horizontal";  // 水平布局
     public static final String PANORAMIC_LAYOUT_VERTICAL = "vertical";  // 垂直布局
-    
+
     // 鱼眼矫正配置
     private static final String KEY_FISHEYE_CORRECTION_ENABLED = "fisheye_correction_enabled";  // 鱼眼矫正开关
     private static final String KEY_FISHEYE_CORRECTION_RATIO = "fisheye_correction_ratio";  // 鱼眼矫正比例（0-100）
-    
+
     private final SharedPreferences prefs;
     
     public AppConfig(Context context) {
@@ -238,7 +264,7 @@ public class AppConfig {
         }
         return prefs.getBoolean(KEY_FIRST_CAMERA_PREVIEW, true);
     }
-    
+
     /**
      * 标记首次启动摄像头预览已完成（领克07/08专用）
      */
@@ -246,7 +272,7 @@ public class AppConfig {
         prefs.edit().putBoolean(KEY_FIRST_CAMERA_PREVIEW, false).apply();
         AppLog.d(TAG, "首次启动摄像头预览标记已设置为完成");
     }
-    
+
     // ==================== 设备识别名称相关方法 ====================
     
     /**
@@ -400,12 +426,12 @@ public class AppConfig {
             // 强制使用 MediaRecorder 模式
             return false;
         } else {
-            // 自动模式：领克07/L6/L7 及 L7-多按钮 车型使用 Codec 模式
+            // 自动模式：领克07/L6/L7、L7-多按钮、26款星舰7 车型使用 Codec 模式
             // 领克07 使用全景摄像头模式，不支持 MediaRecorder 直接录制
             String carModel = getCarModel();
-            return CAR_MODEL_LYNKCO_07.equals(carModel) || 
-                   CAR_MODEL_L7.equals(carModel) || 
-                   CAR_MODEL_L7_MULTI.equals(carModel);
+            return CAR_MODEL_LYNKCO_07.equals(carModel) ||
+                   CAR_MODEL_L7.equals(carModel) ||
+                   CAR_MODEL_L7_MULTI.equals(carModel) || CAR_MODEL_XINGHAN_7.equals(carModel);
         }
     }
     
@@ -696,7 +722,8 @@ public class AppConfig {
             case CAR_MODEL_E5_MULTI:
             case CAR_MODEL_L7:
             case CAR_MODEL_L7_MULTI:
-                return 4;  // 银河E5/L7：4摄
+            case CAR_MODEL_XINGHAN_7:
+                return 4;  // 银河E5/L7/26款星舰7：4摄
             case CAR_MODEL_CUSTOM:
             default:
                 // 自定义车型使用用户设置的数量
@@ -766,7 +793,7 @@ public class AppConfig {
         String key;
         String defaultValue;
         String carModel = getCarModel();
-        
+
         // 领克07：只有一个摄像头，编号为0
         if (CAR_MODEL_LYNKCO_07.equals(carModel)) {
             switch (position) {
@@ -779,7 +806,7 @@ public class AppConfig {
             }
             return prefs.getString(key, defaultValue);
         }
-        
+
         // 领克08加包：1/2/4/5无输出，设备仅支持2路同时打开，使用0(AVM环视)+6(座舱)
         if (CAR_MODEL_LYNKCO_08_PLUS.equals(carModel)) {
             switch (position) {
@@ -796,7 +823,7 @@ public class AppConfig {
             }
             return prefs.getString(key, defaultValue);
         }
-        
+
         // 其他车型（银河E5等）使用4摄配置
         switch (position) {
             case "front":
@@ -976,6 +1003,92 @@ public class AppConfig {
                 return 0;
         }
         return prefs.getInt(key, 0);
+    }
+
+    /**
+     * 设置摄像头镜像
+     * @param position 摄像头位置（front/back/left/right）
+     * @param mirror 是否镜像
+     */
+    public void setCameraMirror(String position, boolean mirror) {
+        String key;
+        switch (position) {
+            case "front":
+                key = KEY_CAMERA_FRONT_MIRROR;
+                break;
+            case "back":
+                key = KEY_CAMERA_BACK_MIRROR;
+                break;
+            case "left":
+                key = KEY_CAMERA_LEFT_MIRROR;
+                break;
+            case "right":
+                key = KEY_CAMERA_RIGHT_MIRROR;
+                break;
+            default:
+                return;
+        }
+        prefs.edit().putBoolean(key, mirror).apply();
+        AppLog.d(TAG, position + " 摄像头镜像设置: " + mirror);
+    }
+
+    /**
+     * 获取摄像头镜像设置
+     * @param position 摄像头位置（front/back/left/right）
+     * @return 是否镜像，默认为false（不镜像）
+     */
+    public boolean getCameraMirror(String position) {
+        String key;
+        switch (position) {
+            case "front":
+                key = KEY_CAMERA_FRONT_MIRROR;
+                break;
+            case "back":
+                key = KEY_CAMERA_BACK_MIRROR;
+                break;
+            case "left":
+                key = KEY_CAMERA_LEFT_MIRROR;
+                break;
+            case "right":
+                key = KEY_CAMERA_RIGHT_MIRROR;
+                break;
+            default:
+                return false;
+        }
+        return prefs.getBoolean(key, false);
+    }
+
+    /**
+     * 设置摄像头裁剪值
+     * @param position 位置（front/back/left/right）
+     * @param direction 方向（top/bottom/left/right）
+     * @param pixels 裁剪像素值
+     */
+    public void setCameraCrop(String position, String direction, int pixels) {
+        String key = KEY_CAMERA_CROP_PREFIX + position + "_" + direction;
+        prefs.edit().putInt(key, Math.max(0, pixels)).apply();
+    }
+
+    /**
+     * 获取摄像头裁剪值
+     * @param position 位置（front/back/left/right）
+     * @param direction 方向（top/bottom/left/right）
+     * @return 裁剪像素值，默认为0
+     */
+    public int getCameraCrop(String position, String direction) {
+        String key = KEY_CAMERA_CROP_PREFIX + position + "_" + direction;
+        return prefs.getInt(key, 0);
+    }
+
+    /**
+     * 重置摄像头的所有裁剪值
+     * @param position 位置（front/back/left/right）
+     */
+    public void resetCameraCrop(String position) {
+        setCameraCrop(position, "top", 0);
+        setCameraCrop(position, "bottom", 0);
+        setCameraCrop(position, "left", 0);
+        setCameraCrop(position, "right", 0);
     }
 
     /**
@@ -1663,9 +1776,9 @@ public class AppConfig {
             default: return "未知";
         }
     }
-    
+
     // ==================== 全景摄像头模式配置相关方法 ====================
-    
+
     /**
      * 设置全景摄像头模式开关
      * @param enabled true 表示启用全景摄像头模式
@@ -1674,7 +1787,7 @@ public class AppConfig {
         prefs.edit().putBoolean(KEY_PANORAMA_MODE_ENABLED, enabled).apply();
         AppLog.d(TAG, "全景摄像头模式设置: " + (enabled ? "启用" : "禁用"));
     }
-    
+
     /**
      * 获取全景摄像头模式开关状态
      * @return true 表示启用全景摄像头模式
@@ -1684,9 +1797,9 @@ public class AppConfig {
         boolean defaultValue = false;
         return prefs.getBoolean(KEY_PANORAMA_MODE_ENABLED, defaultValue);
     }
-    
+
     // ==================== 鱼眼矫正配置相关方法 ====================
-    
+
     /**
      * 设置鱼眼矫正开关
      * @param enabled true 表示启用鱼眼矫正
@@ -1695,7 +1808,7 @@ public class AppConfig {
         prefs.edit().putBoolean(KEY_FISHEYE_CORRECTION_ENABLED, enabled).apply();
         AppLog.d(TAG, "鱼眼矫正设置: " + (enabled ? "启用" : "禁用"));
     }
-    
+
     /**
      * 获取鱼眼矫正开关状态
      * @return true 表示启用鱼眼矫正
@@ -1705,7 +1818,7 @@ public class AppConfig {
         boolean defaultValue = false;
         return prefs.getBoolean(KEY_FISHEYE_CORRECTION_ENABLED, defaultValue);
     }
-    
+
     /**
      * 设置鱼眼矫正比例
      * @param ratio 矫正比例（0-100），50表示50%
@@ -1716,7 +1829,7 @@ public class AppConfig {
         prefs.edit().putInt(KEY_FISHEYE_CORRECTION_RATIO, ratio).apply();
         AppLog.d(TAG, "鱼眼矫正比例设置: " + ratio + "%");
     }
-    
+
     /**
      * 获取鱼眼矫正比例
      * @return 矫正比例（0-100），默认为50%
@@ -1725,7 +1838,7 @@ public class AppConfig {
         // 领克07/08车型默认50%
         return prefs.getInt(KEY_FISHEYE_CORRECTION_RATIO, 50);
     }
-    
+
     /**
      * 获取鱼眼矫正比例的浮点值（用于实际计算）
      * @return 矫正比例（0.0-1.0）
@@ -1733,9 +1846,9 @@ public class AppConfig {
     public float getFisheyeCorrectionRatioFloat() {
         return getFisheyeCorrectionRatio() / 100f;
     }
-    
+
     // ==================== 全景模式详细配置方法 ====================
-    
+
     /**
      * 设置全景摄像头ID
      * @param cameraId 摄像头ID
@@ -1744,7 +1857,7 @@ public class AppConfig {
         prefs.edit().putString(KEY_PANORAMIC_CAMERA_ID, cameraId).apply();
         AppLog.d(TAG, "全景摄像头ID设置: " + cameraId);
     }
-    
+
     /**
      * 获取全景摄像头ID
      * @return 摄像头ID，默认为"0"
@@ -1752,7 +1865,7 @@ public class AppConfig {
     public String getPanoramicCameraId() {
         return prefs.getString(KEY_PANORAMIC_CAMERA_ID, "0");
     }
-    
+
     /**
      * 设置全景模式区域映射
      * @param region 区域（top_left/top_right/bottom_left/bottom_right）
@@ -1779,7 +1892,7 @@ public class AppConfig {
         prefs.edit().putString(key, direction).apply();
         AppLog.d(TAG, "全景映射设置: " + region + " -> " + direction);
     }
-    
+
     /**
      * 获取全景模式区域映射
      * @param region 区域（top_left/top_right/bottom_left/bottom_right）
@@ -1810,7 +1923,7 @@ public class AppConfig {
         }
         return prefs.getString(key, defaultValue);
     }
-    
+
     /**
      * 根据区域获取全景裁切区域（静态方法）
      * @param region 区域（top_left/top_right/bottom_left/bottom_right）
@@ -1830,7 +1943,7 @@ public class AppConfig {
                 return new float[]{0.0f, 0.0f, 1.0f, 1.0f};
         }
     }
-    
+
     /**
      * 根据方向获取全景裁切区域（静态方法）
      * @param direction 方向（front/back/left/right）
@@ -1850,7 +1963,7 @@ public class AppConfig {
                 return new float[]{0.0f, 0.0f, 1.0f, 1.0f};
         }
     }
-    
+
     /**
      * 获取方向对应的裁切区域
      * @param direction 方向（front/back/left/right）
@@ -1859,7 +1972,7 @@ public class AppConfig {
     public float[] getPanoramicCropRegionForPosition(String direction) {
         return getPanoramicCropRegionByRegion(getPanoramicRegionForDirection(direction));
     }
-    
+
     /**
      * 根据方向获取对应的区域
      * @param direction 方向（front/back/left/right）
@@ -1881,7 +1994,7 @@ public class AppConfig {
             default: return "top_left";
         }
     }
-    
+
     /**
      * 设置全景模式方向旋转角度
      * @param direction 方向（front/back/left/right）
@@ -1908,7 +2021,7 @@ public class AppConfig {
         prefs.edit().putInt(key, rotation).apply();
         AppLog.d(TAG, "全景旋转设置: " + direction + " -> " + rotation + "°");
     }
-    
+
     /**
      * 获取全景模式方向旋转角度
      * @param direction 方向（front/back/left/right）
@@ -1934,7 +2047,7 @@ public class AppConfig {
         }
         return prefs.getInt(key, 0);
     }
-    
+
     /**
      * 设置全景模式鱼眼校正开关
      * @param enabled true 表示启用
@@ -1943,7 +2056,7 @@ public class AppConfig {
         prefs.edit().putBoolean(KEY_PANORAMIC_FISHEYE_CORRECTION, enabled).apply();
         AppLog.d(TAG, "全景鱼眼校正: " + (enabled ? "启用" : "禁用"));
     }
-    
+
     /**
      * 获取全景模式鱼眼校正开关状态
      * @return true 表示启用
@@ -1951,7 +2064,7 @@ public class AppConfig {
     public boolean isPanoramicFisheyeCorrectionEnabled() {
         return prefs.getBoolean(KEY_PANORAMIC_FISHEYE_CORRECTION, false);
     }
-    
+
     /**
      * 设置全景模式鱼眼校正强度
      * @param strength 强度（0-100）
@@ -1961,7 +2074,7 @@ public class AppConfig {
         prefs.edit().putInt(KEY_PANORAMIC_FISHEYE_STRENGTH, strength).apply();
         AppLog.d(TAG, "全景鱼眼校正强度: " + strength);
     }
-    
+
     /**
      * 获取全景模式鱼眼校正强度
      * @return 强度（0-100），默认50
@@ -1969,7 +2082,7 @@ public class AppConfig {
     public int getPanoramicFisheyeStrength() {
         return prefs.getInt(KEY_PANORAMIC_FISHEYE_STRENGTH, 50);
     }
-    
+
     /**
      * 设置全景布局模式
      * @param mode 布局模式（grid/horizontal/vertical）
@@ -1978,12 +2091,161 @@ public class AppConfig {
         prefs.edit().putString(KEY_PANORAMIC_LAYOUT_MODE, mode).apply();
         AppLog.d(TAG, "全景布局模式: " + mode);
     }
-    
+
     /**
      * 获取全景布局模式
      * @return 布局模式，默认为grid
      */
     public String getPanoramicLayoutMode() {
         return prefs.getString(KEY_PANORAMIC_LAYOUT_MODE, PANORAMIC_LAYOUT_GRID);
+    }
+
+    // ==================== 自定义车型自由操控配置相关方法 ====================
+
+    /**
+     * 设置自由操控开关
+     * @param enabled true 表示启用自由操控
+     */
+    public void setCustomFreeControlEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_CUSTOM_FREE_CONTROL_ENABLED, enabled).apply();
+        AppLog.d(TAG, "自由操控设置: " + (enabled ? "启用" : "禁用"));
+    }
+
+    /**
+     * 获取自由操控开关状态
+     * @return true 表示启用自由操控
+     */
+    public boolean isCustomFreeControlEnabled() {
+        return prefs.getBoolean(KEY_CUSTOM_FREE_CONTROL_ENABLED, false);
+    }
+
+    /**
+     * 设置按钮样式
+     * @param style 按钮样式（BUTTON_STYLE_STANDARD / BUTTON_STYLE_MULTI）
+     */
+    public void setCustomButtonStyle(String style) {
+        prefs.edit().putString(KEY_CUSTOM_BUTTON_STYLE, style).apply();
+        AppLog.d(TAG, "按钮样式设置: " + style);
+    }
+
+    /**
+     * 获取按钮样式
+     * @return 按钮样式，默认为标准按钮
+     */
+    public String getCustomButtonStyle() {
+        return prefs.getString(KEY_CUSTOM_BUTTON_STYLE, BUTTON_STYLE_STANDARD);
+    }
+
+    /**
+     * 设置按钮布局方向
+     * @param orientation 方向（BUTTON_ORIENTATION_HORIZONTAL / BUTTON_ORIENTATION_VERTICAL）
+     */
+    public void setCustomButtonOrientation(String orientation) {
+        prefs.edit().putString(KEY_CUSTOM_BUTTON_ORIENTATION, orientation).apply();
+        AppLog.d(TAG, "按钮布局方向设置: " + orientation);
+    }
+
+    /**
+     * 获取按钮布局方向
+     * @return 布局方向，默认为横版
+     */
+    public String getCustomButtonOrientation() {
+        return prefs.getString(KEY_CUSTOM_BUTTON_ORIENTATION, BUTTON_ORIENTATION_HORIZONTAL);
+    }
+
+    /**
+     * 保存自定义布局数据（JSON格式）
+     * @param layoutDataJson 布局数据JSON字符串
+     */
+    public void setCustomLayoutData(String layoutDataJson) {
+        prefs.edit().putString(KEY_CUSTOM_LAYOUT_DATA, layoutDataJson).apply();
+        AppLog.d(TAG, "自定义布局数据已保存");
+    }
+
+    /**
+     * 获取自定义布局数据
+     * @return 布局数据JSON字符串，如果未设置返回null
+     */
+    public String getCustomLayoutData() {
+        return prefs.getString(KEY_CUSTOM_LAYOUT_DATA, null);
+    }
+
+    /**
+     * 清除自定义布局数据
+     */
+    public void clearCustomLayoutData() {
+        prefs.edit().remove(KEY_CUSTOM_LAYOUT_DATA).apply();
+        AppLog.d(TAG, "自定义布局数据已清除");
+    }
+
+    /**
+     * 根据旋转角度计算实际显示比例
+     * @param width 原始宽度
+     * @param height 原始高度
+     * @param rotation 旋转角度 (0/90/180/270)
+     * @return [displayWidth, displayHeight]
+     */
+    public static int[] calculateDisplayRatio(int width, int height, int rotation) {
+        if (rotation == 90 || rotation == 270) {
+            // 旋转90°或270°时，宽高互换
+            return new int[]{height, width};
+        }
+        return new int[]{width, height};
+    }
+
+    /**
+     * 获取按钮样式的显示名称
+     */
+    public static String getButtonStyleDisplayName(String style) {
+        if (BUTTON_STYLE_MULTI.equals(style)) {
+            return "多按钮";
+        }
+        return "标准";
+    }
+
+    /**
+     * 获取按钮方向的显示名称
+     */
+    public static String getButtonOrientationDisplayName(String orientation) {
+        if (BUTTON_ORIENTATION_VERTICAL.equals(orientation)) {
+            return "竖版";
+        }
+        return "横版";
+    }
+
+    // ==================== 版本更新配置相关方法 ====================
+
+    /**
+     * 设置更新服务器地址
+     * @param url 服务器地址（如 https://example.com/update/）
+     */
+    public void setUpdateServerUrl(String url) {
+        if (url == null || url.trim().isEmpty()) {
+            prefs.edit().remove(KEY_UPDATE_SERVER_URL).apply();
+            AppLog.d(TAG, "清除更新服务器地址");
+        } else {
+            prefs.edit().putString(KEY_UPDATE_SERVER_URL, url.trim()).apply();
+            AppLog.d(TAG, "更新服务器地址设置: " + url.trim());
+        }
+    }
+
+    /**
+     * 获取更新服务器地址
+     * @return 服务器地址，默认为官方更新服务器
+     */
+    public String getUpdateServerUrl() {
+        String url = prefs.getString(KEY_UPDATE_SERVER_URL, DEFAULT_UPDATE_SERVER_URL);
+        if (url == null || url.trim().isEmpty()) {
+            return DEFAULT_UPDATE_SERVER_URL;
+        }
+        return url;
+    }
+
+    /**
+     * 检查是否已配置更新服务器
+     * @return true 表示已配置
+     */
+    public boolean hasUpdateServerUrl() {
+        return getUpdateServerUrl() != null;
     }
 }

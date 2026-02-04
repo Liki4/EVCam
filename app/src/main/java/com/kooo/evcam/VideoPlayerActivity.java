@@ -1,7 +1,12 @@
 package com.kooo.evcam;
 
+import android.content.Context;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
+import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.view.View;
@@ -127,6 +132,11 @@ public class VideoPlayerActivity extends AppCompatActivity {
             videoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                 @Override
                 public void onPrepared(MediaPlayer mp) {
+                    // 行车记录仪视频没有声音，设置静音并放弃音频焦点
+                    // 这样不会暂停车机的其他音频播放（如音乐）
+                    mp.setVolume(0f, 0f);
+                    abandonAudioFocus();
+
                     int duration = videoView.getDuration();
                     seekBar.setMax(duration);
                     totalTimeText.setText(formatTime(duration));
@@ -224,6 +234,29 @@ public class VideoPlayerActivity extends AppCompatActivity {
             }
         }
     };
+
+    /**
+     * 放弃音频焦点，让其他应用（如音乐播放器）继续播放
+     * 行车记录仪视频没有声音，不需要抢占音频焦点
+     */
+    private void abandonAudioFocus() {
+        AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // API 26+ 使用新的 AudioFocusRequest API
+                AudioFocusRequest focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                        .setAudioAttributes(new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_MEDIA)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                                .build())
+                        .build();
+                audioManager.abandonAudioFocusRequest(focusRequest);
+            } else {
+                // 旧版本 API
+                audioManager.abandonAudioFocus(null);
+            }
+        }
+    }
 
     @Override
     protected void onPause() {

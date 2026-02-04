@@ -48,6 +48,8 @@ import com.kooo.evcam.wechat.WechatMiniConfig;
 import com.kooo.evcam.wechat.WechatRemoteManager;
 import com.kooo.evcam.remote.RemoteCommandDispatcher;
 import com.kooo.evcam.remote.handler.RemoteCommandHandler;
+import com.kooo.evcam.playback.PlaybackFragmentNew;
+import com.kooo.evcam.playback.PhotoPlaybackFragmentNew;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -86,7 +88,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     private AutoFitTextureView textureMain;  // 领克07专用：中间主画面
     private Button btnStartRecord, btnExit, btnTakePhoto;
     private MultiCameraManager cameraManager;
-    
+
     // ==================== 领克07 5镜头交互相关 ====================
     private boolean isLynkCo07Layout = false;  // 是否使用领克07专用布局
     private String currentMainViewType = "full";  // 当前主画面类型：full/front/back/left/right
@@ -101,7 +103,8 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     private boolean isInBackground = false;  // 是否在后台
     private boolean pendingRemoteCommand = false;  // 是否有待处理的远程命令
     private boolean isRemoteWakeUp = false;  // 是否是远程命令唤醒的（用于完成后自动退回后台）
-    
+    private boolean hasBeenResumedOnce = false;  // Activity 是否已经完全恢复过一次（用于区分新创建和已存在）
+
     // 防双击保护
     private long lastRecordButtonClickTime = 0;  // 上次点击录制按钮的时间
     private static final long RECORD_BUTTON_CLICK_INTERVAL = 1000;  // 最小点击间隔（1秒）
@@ -120,6 +123,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     
     // 息屏录制相关
     private android.content.BroadcastReceiver screenStateReceiver;  // 屏幕状态广播接收器
+    private android.content.BroadcastReceiver backgroundCommandReceiver;  // 后台切换广播接收器
     private android.os.Handler screenStateHandler;  // 息屏/亮屏延迟处理
     private Runnable screenOffStopRunnable;  // 息屏停止录制的延迟任务
     private Runnable screenOnStartRunnable;  // 亮屏恢复录制的延迟任务
@@ -130,9 +134,11 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     private static final long SCREEN_ON_DELAY_MS = 10000;   // 亮屏后等待10秒（恢复录制）
     private static final long SCREEN_OFF_BACKGROUND_DELAY_MS = 15000;  // 息屏后等待15秒（退后台）
     
+
     // 车型配置相关
     private AppConfig appConfig;
     private int configuredCameraCount = 4;  // 配置的摄像头数量
+    private CustomLayoutManager customLayoutManager;  // 自定义车型布局管理器
 
     // 录制按钮闪烁动画相关
     private android.os.Handler blinkHandler;
@@ -142,6 +148,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     // 录制状态显示相关
     private TextView tvRecordingStats;
     private android.os.Handler recordingTimerHandler;
+
     private Runnable recordingTimerRunnable;
     private long recordingStartTime = 0;  // 录制开始时间
     private int currentSegmentCount = 1;  // 当前分段数
@@ -194,6 +201,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     
     // 远程命令分发器（重构后的统一入口）
     private RemoteCommandDispatcher remoteCommandDispatcher;
+
+    // 心跳推图管理器
+    private com.kooo.evcam.heartbeat.HeartbeatManager heartbeatManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -280,6 +290,12 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 dingTalkApiClient = RemoteServiceManager.getInstance().getDingTalkApiClient();
                 dingTalkStreamManager = RemoteServiceManager.getInstance().getDingTalkStreamManager();
                 
+                // 【修复】立即同步到 RemoteCommandDispatcher（如果已初始化且获取成功）
+                if (dingTalkApiClient != null && remoteCommandDispatcher != null) {
+                    remoteCommandDispatcher.setDingTalkApiClient(dingTalkApiClient);
+                    AppLog.d(TAG, "钉钉 API 客户端已同步到 RemoteCommandDispatcher");
+                }
+
                 // 如果服务正在启动中，延迟获取实例
                 if (dingTalkApiClient == null || dingTalkStreamManager == null) {
                     AppLog.d(TAG, "钉钉服务正在启动中，延迟 500ms 后获取实例");
@@ -288,6 +304,11 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                         dingTalkStreamManager = RemoteServiceManager.getInstance().getDingTalkStreamManager();
                         AppLog.d(TAG, "延迟获取钉钉实例: apiClient=" + (dingTalkApiClient != null) + 
                                      ", streamManager=" + (dingTalkStreamManager != null));
+                        // 【修复】延迟获取后也需要同步到 RemoteCommandDispatcher
+                        if (dingTalkApiClient != null && remoteCommandDispatcher != null) {
+                            remoteCommandDispatcher.setDingTalkApiClient(dingTalkApiClient);
+                            AppLog.d(TAG, "钉钉 API 客户端已延迟同步到 RemoteCommandDispatcher");
+                        }
                     }, 500);
                 }
             } else {
@@ -303,6 +324,12 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 telegramApiClient = RemoteServiceManager.getInstance().getTelegramApiClient();
                 telegramBotManager = RemoteServiceManager.getInstance().getTelegramBotManager();
                 
+                // 【修复】立即同步到 RemoteCommandDispatcher
+                if (telegramApiClient != null && remoteCommandDispatcher != null) {
+                    remoteCommandDispatcher.setTelegramApiClient(telegramApiClient);
+                    AppLog.d(TAG, "Telegram API 客户端已同步到 RemoteCommandDispatcher");
+                }
+
                 // 如果服务正在启动中，延迟获取实例
                 if (telegramApiClient == null || telegramBotManager == null) {
                     AppLog.d(TAG, "Telegram 服务正在启动中，延迟 500ms 后获取实例");
@@ -311,6 +338,11 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                         telegramBotManager = RemoteServiceManager.getInstance().getTelegramBotManager();
                         AppLog.d(TAG, "延迟获取 Telegram 实例: apiClient=" + (telegramApiClient != null) + 
                                      ", botManager=" + (telegramBotManager != null));
+                        // 【修复】延迟获取后也需要同步
+                        if (telegramApiClient != null && remoteCommandDispatcher != null) {
+                            remoteCommandDispatcher.setTelegramApiClient(telegramApiClient);
+                            AppLog.d(TAG, "Telegram API 客户端已延迟同步到 RemoteCommandDispatcher");
+                        }
                     }, 500);
                 }
             } else {
@@ -325,6 +357,12 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 feishuApiClient = RemoteServiceManager.getInstance().getFeishuApiClient();
                 feishuBotManager = RemoteServiceManager.getInstance().getFeishuBotManager();
                 
+                // 【修复】立即同步到 RemoteCommandDispatcher
+                if (feishuApiClient != null && remoteCommandDispatcher != null) {
+                    remoteCommandDispatcher.setFeishuApiClient(feishuApiClient);
+                    AppLog.d(TAG, "飞书 API 客户端已同步到 RemoteCommandDispatcher");
+                }
+
                 if (feishuApiClient == null || feishuBotManager == null) {
                     AppLog.d(TAG, "飞书服务正在启动中，延迟 500ms 后获取实例");
                     new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
@@ -332,6 +370,11 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                         feishuBotManager = RemoteServiceManager.getInstance().getFeishuBotManager();
                         AppLog.d(TAG, "延迟获取飞书实例: apiClient=" + (feishuApiClient != null) + 
                                      ", botManager=" + (feishuBotManager != null));
+                        // 【修复】延迟获取后也需要同步
+                        if (feishuApiClient != null && remoteCommandDispatcher != null) {
+                            remoteCommandDispatcher.setFeishuApiClient(feishuApiClient);
+                            AppLog.d(TAG, "飞书 API 客户端已延迟同步到 RemoteCommandDispatcher");
+                        }
                     }, 500);
                 }
             } else {
@@ -464,6 +507,17 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
 
         AppLog.d(TAG, "Received remote command from intent: " + action);
 
+        // 处理前台切换指令（不需要等待摄像头）
+        if ("foreground".equals(action)) {
+            intent.removeExtra("remote_action");
+            AppLog.d(TAG, "Foreground command executed - app brought to front");
+            // Activity 已经被启动到前台，不需要额外操作
+            return;
+        }
+
+        // 注意：后台指令现在通过广播处理（WakeUpHelper.ACTION_MOVE_TO_BACKGROUND）
+        // 不再通过 startActivity 方式，避免闪屏问题
+
         // 先切换到主界面（录制界面），确保显示正确的界面
         showRecordingInterface();
         AppLog.d(TAG, "Switched to recording interface");
@@ -484,17 +538,23 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             pendingRemoteCommand = true;
             
             // 判断是否应该在完成后返回后台
-            boolean shouldReturnToBackground = isInBackground && !isRecording;
+            boolean isRemoteWakeUpIntent = intent.getBooleanExtra("remote_wake_up", false);
+            boolean wasAlreadyInForeground = hasBeenResumedOnce && !isInBackground;
+            boolean shouldReturnToBackground = isRemoteWakeUpIntent && !isRecording && !wasAlreadyInForeground;
+
             if (shouldReturnToBackground) {
                 isRemoteWakeUp = true;
                 AppLog.d(TAG, "Telegram: Remote wake-up flag set, will return to background after completion");
+            } else if (wasAlreadyInForeground) {
+                isRemoteWakeUp = false;
+                AppLog.d(TAG, "Telegram: App was in foreground, will stay in foreground after completion");
             } else {
                 isRemoteWakeUp = false;
-                AppLog.d(TAG, "Telegram: App was active, will stay in foreground after completion");
+                AppLog.d(TAG, "Telegram: Recording in progress or no wake-up flag, staying in foreground");
             }
             
-            // 延迟执行命令，等待摄像头准备好（与钉钉相同的逻辑）
-            int delay = isInBackground ? 3000 : 1500;
+            // 延迟执行命令，等待摄像头准备好
+            int delay = wasAlreadyInForeground ? 1500 : 3000;
             final String finalAction = action;
             
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
@@ -542,17 +602,23 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             pendingRemoteCommand = true;
             
             // 判断是否应该在完成后返回后台
-            boolean shouldReturnToBackground = isInBackground && !isRecording;
+            boolean isRemoteWakeUpIntent = intent.getBooleanExtra("remote_wake_up", false);
+            boolean wasAlreadyInForeground = hasBeenResumedOnce && !isInBackground;
+            boolean shouldReturnToBackground = isRemoteWakeUpIntent && !isRecording && !wasAlreadyInForeground;
+
             if (shouldReturnToBackground) {
                 isRemoteWakeUp = true;
                 AppLog.d(TAG, "Feishu: Remote wake-up flag set, will return to background after completion");
+            } else if (wasAlreadyInForeground) {
+                isRemoteWakeUp = false;
+                AppLog.d(TAG, "Feishu: App was in foreground, will stay in foreground after completion");
             } else {
                 isRemoteWakeUp = false;
-                AppLog.d(TAG, "Feishu: App was active, will stay in foreground after completion");
+                AppLog.d(TAG, "Feishu: Recording in progress or no wake-up flag, staying in foreground");
             }
             
             // 延迟执行命令，等待摄像头准备好
-            int delay = isInBackground ? 3000 : 1500;
+            int delay = wasAlreadyInForeground ? 1500 : 3000;
             final String finalAction = action;
             final String finalChatId = chatId;
             
@@ -600,17 +666,23 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             pendingRemoteCommand = true;
             
             // 判断是否应该在完成后返回后台
-            boolean shouldReturnToBackground = isInBackground && !isRecording;
+            boolean isRemoteWakeUpIntent = intent.getBooleanExtra("remote_wake_up", false);
+            boolean wasAlreadyInForeground = hasBeenResumedOnce && !isInBackground;
+            boolean shouldReturnToBackground = isRemoteWakeUpIntent && !isRecording && !wasAlreadyInForeground;
+
             if (shouldReturnToBackground) {
                 isRemoteWakeUp = true;
                 AppLog.d(TAG, "WeChat: Remote wake-up flag set, will return to background after completion");
+            } else if (wasAlreadyInForeground) {
+                isRemoteWakeUp = false;
+                AppLog.d(TAG, "WeChat: App was in foreground, will stay in foreground after completion");
             } else {
                 isRemoteWakeUp = false;
-                AppLog.d(TAG, "WeChat: App was active, will stay in foreground after completion");
+                AppLog.d(TAG, "WeChat: Recording in progress or no wake-up flag, staying in foreground");
             }
             
             // 延迟执行命令，等待摄像头准备好
-            int delay = isInBackground ? 3000 : 1500;
+            int delay = wasAlreadyInForeground ? 1500 : 3000;
             final String finalAction = action;
             final String finalCommandId = commandId;
             final int finalDuration = duration;
@@ -657,20 +729,31 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         pendingRemoteCommand = true;
         
         // 判断是否应该在完成后返回后台
-        // 只有当应用是从真正的后台被唤醒时才返回后台
-        // 如果应用正在录制（非远程录制），说明用户正在使用，不应该返回后台
-        boolean shouldReturnToBackground = isInBackground && !isRecording;
+        // 逻辑：
+        // 1. 如果正在录制，保持前台（用户可能正在使用）
+        // 2. 如果 Intent 有 remote_wake_up=true（从 WakeUpHelper 发起）：
+        //    - 如果应用之前就在前台（hasBeenResumedOnce=true 且 isInBackground=false），保持前台
+        //    - 否则是从后台唤醒的，返回后台
+        boolean isRemoteWakeUpIntent = intent.getBooleanExtra("remote_wake_up", false);
+        boolean wasAlreadyInForeground = hasBeenResumedOnce && !isInBackground;
+        boolean shouldReturnToBackground = isRemoteWakeUpIntent && !isRecording && !wasAlreadyInForeground;
+
         if (shouldReturnToBackground) {
             isRemoteWakeUp = true;
             AppLog.d(TAG, "Remote wake-up flag set, will return to background after completion");
+        } else if (isRecording) {
+            isRemoteWakeUp = false;
+            AppLog.d(TAG, "Recording in progress, will stay in foreground after completion");
+        } else if (wasAlreadyInForeground) {
+            isRemoteWakeUp = false;
+            AppLog.d(TAG, "App was already in foreground, will stay in foreground after completion");
         } else {
             isRemoteWakeUp = false;
-            AppLog.d(TAG, "App was active (recording or in foreground), will stay in foreground after completion");
+            AppLog.d(TAG, "No remote_wake_up flag, will stay in foreground");
         }
 
         // 延迟执行命令，等待摄像头准备好
-        // 如果从后台唤醒，摄像头需要时间重新连接
-        int delay = isInBackground ? 3000 : 1500;
+        int delay = wasAlreadyInForeground ? 1500 : 3000;
         
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             pendingRemoteCommand = false;
@@ -870,41 +953,19 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             layoutId = R.layout.activity_main_2cam;
             AppLog.d(TAG, "使用领克08加包配置：2摄像头布局（前=0环视，后=6座舱）");
         }
-        // 自定义车型：根据配置选择布局
+        // 26款星舰7：横屏四摄像头布局（基于银河E5布局）
+        else if (AppConfig.CAR_MODEL_XINGHAN_7.equals(carModel)) {
+            layoutId = R.layout.activity_main;
+            configuredCameraCount = 4;
+            requiredTextureCount = 4;
+            AppLog.d(TAG, "使用26款星舰7配置：横屏4摄像头布局");
+        }
+        // 自定义车型：使用统一的自定义布局（支持自由操控）
         else if (appConfig.isCustomCarModel()) {
+            layoutId = R.layout.activity_main_custom;
             configuredCameraCount = appConfig.getCameraCount();
-            String orientation = appConfig.getScreenOrientation();
-
-            switch (configuredCameraCount) {
-                case 1:
-                    layoutId = R.layout.activity_main_1cam;
-                    requiredTextureCount = 1;
-                    AppLog.d(TAG, "使用自定义车型：1摄像头布局");
-                    break;
-                case 2:
-                    layoutId = R.layout.activity_main_2cam;
-                    requiredTextureCount = 2;
-                    AppLog.d(TAG, "使用自定义车型：2摄像头布局");
-                    break;
-                case 4:
-                    // 4摄像头：根据屏幕方向选择布局
-                    if ("portrait".equals(orientation)) {
-                        layoutId = R.layout.activity_main_4cam_portrait;
-                        AppLog.d(TAG, "使用自定义车型：4摄像头竖屏布局");
-                    } else {
-                        layoutId = R.layout.activity_main_4cam;
-                        AppLog.d(TAG, "使用自定义车型：4摄像头横屏布局");
-                    }
-                    requiredTextureCount = 4;
-                    break;
-                default:
-                    // 无效的摄像头数量，使用自定义4摄像头横屏布局
-                    layoutId = R.layout.activity_main_4cam;
-                    configuredCameraCount = 4;
-                    requiredTextureCount = 4;
-                    AppLog.d(TAG, "使用自定义车型：4摄像头横屏布局（默认）");
-                    break;
-            }
+            requiredTextureCount = configuredCameraCount;
+            AppLog.d(TAG, "使用自定义车型布局：" + configuredCameraCount + "摄像头");
         }
         // 银河E5：横屏四摄像头布局
         else {
@@ -982,7 +1043,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         if (isLynkCo07Layout) {
             initLynkCo07Views();
         }
-        
+
         btnStartRecord = findViewById(R.id.btn_start_record);
         btnExit = findViewById(R.id.btn_exit);
         btnTakePhoto = findViewById(R.id.btn_take_photo);
@@ -993,6 +1054,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         
         // 更新摄像头标签（如果是自定义车型）
         updateCameraLabels();
+
+        // 初始化自定义布局管理器（如果是自定义车型）
+        initCustomLayoutManager();
 
         // 菜单按钮点击事件（部分布局可能没有此按钮）
         View btnMenu = findViewById(R.id.btn_menu);
@@ -1150,7 +1214,173 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             label.setVisibility(View.VISIBLE);
         }
     }
-    
+
+    /**
+     * 初始化自定义布局管理器（仅在自定义车型时有效）
+     * 业务逻辑委托给 CustomLayoutManager 处理
+     */
+    private void initCustomLayoutManager() {
+        if (!appConfig.isCustomCarModel()) {
+            return;
+        }
+
+        // 获取视图引用
+        android.widget.FrameLayout frameFront = findViewById(R.id.frame_front);
+        android.widget.FrameLayout frameBack = findViewById(R.id.frame_back);
+        android.widget.FrameLayout frameLeft = findViewById(R.id.frame_left);
+        android.widget.FrameLayout frameRight = findViewById(R.id.frame_right);
+        View editControls = findViewById(R.id.edit_controls);
+        View containerCameras = findViewById(R.id.container_cameras);
+
+        // 按钮容器根据方向选择
+        String buttonOrientation = appConfig.getCustomButtonOrientation();
+        boolean isVertical = AppConfig.BUTTON_ORIENTATION_VERTICAL.equals(buttonOrientation);
+        android.view.ViewGroup buttonContainer = isVertical ?
+            findViewById(R.id.container_buttons_left) :
+            findViewById(R.id.container_buttons_bottom);
+
+        // 根据摄像头数量隐藏不需要的容器
+        if (configuredCameraCount < 4) {
+            if (frameLeft != null) frameLeft.setVisibility(View.GONE);
+            if (frameRight != null) frameRight.setVisibility(View.GONE);
+        }
+        if (configuredCameraCount < 2) {
+            if (frameBack != null) frameBack.setVisibility(View.GONE);
+        }
+
+        // 动态加载按钮布局
+        setupCustomButtonLayout(buttonContainer);
+
+        // 初始化布局管理器（所有业务逻辑由 Manager 处理）
+        customLayoutManager = new CustomLayoutManager(this);
+        customLayoutManager.setCameraCount(configuredCameraCount);
+        customLayoutManager.setOnButtonLayoutChangeListener(orientation -> {
+            // 重新加载按钮布局
+            android.view.ViewGroup newContainer = orientation.equals(AppConfig.BUTTON_ORIENTATION_VERTICAL) ?
+                    findViewById(R.id.container_buttons_left) : findViewById(R.id.container_buttons_bottom);
+            setupCustomButtonLayout(newContainer);
+
+            // 更新布局管理器中的按钮容器引用
+            customLayoutManager.updateButtonContainer(newContainer);
+        });
+        customLayoutManager.setupFloatingViews(
+                frameFront, frameBack, frameLeft, frameRight,
+                buttonContainer, editControls, containerCameras,
+                textureFront, textureBack, textureLeft, textureRight);
+
+        AppLog.d(TAG, "自定义布局管理器初始化完成");
+    }
+
+    /**
+     * 设置自定义按钮布局
+     * 根据配置动态加载按钮样式和方向
+     */
+    private void setupCustomButtonLayout(android.view.ViewGroup ignoredContainer) {
+        // 获取配置
+        String buttonStyle = appConfig.getCustomButtonStyle();
+        String buttonOrientation = appConfig.getCustomButtonOrientation();
+        boolean isVertical = AppConfig.BUTTON_ORIENTATION_VERTICAL.equals(buttonOrientation);
+
+        AppLog.d(TAG, "按钮配置读取: style=" + buttonStyle + " (standard=" + AppConfig.BUTTON_STYLE_STANDARD + "), orientation=" + buttonOrientation);
+
+        // 获取两个按钮容器
+        android.widget.FrameLayout leftContainer = findViewById(R.id.container_buttons_left);
+        android.widget.FrameLayout bottomContainer = findViewById(R.id.container_buttons_bottom);
+
+        if (leftContainer == null || bottomContainer == null) {
+            AppLog.e(TAG, "Button containers not found");
+            return;
+        }
+
+        // 清除两个容器
+        leftContainer.removeAllViews();
+        bottomContainer.removeAllViews();
+
+        // 选择布局资源
+        int layoutResId;
+        boolean isStandard = AppConfig.BUTTON_STYLE_STANDARD.equals(buttonStyle);
+        AppLog.d(TAG, "按钮样式判断: buttonStyle='" + buttonStyle + "', STANDARD='" + AppConfig.BUTTON_STYLE_STANDARD + "', isStandard=" + isStandard);
+
+        if (isStandard) {
+            // 标准按钮（E5风格图标按钮）
+            layoutResId = isVertical ?
+                R.layout.layout_custom_buttons_standard_vertical :
+                R.layout.layout_custom_buttons_standard;
+            AppLog.d(TAG, ">>> 使用标准按钮布局(图标) - " + (isVertical ? "竖版" : "横版") + ", layoutResId=" + layoutResId);
+        } else {
+            // 多按钮（文字按钮）
+            layoutResId = isVertical ?
+                R.layout.layout_custom_buttons_multi_vertical :
+                R.layout.layout_custom_buttons_multi;
+            AppLog.d(TAG, ">>> 使用多按钮布局(文字) - " + (isVertical ? "竖版" : "横版") + ", layoutResId=" + layoutResId);
+        }
+
+        // 加载布局到正确的容器
+        android.view.LayoutInflater inflater = android.view.LayoutInflater.from(this);
+        View buttonsView = inflater.inflate(layoutResId, null, false);
+
+        android.view.ViewGroup targetContainer;
+        if (isVertical) {
+            // 竖版：按钮在左侧
+            leftContainer.addView(buttonsView);
+            leftContainer.setVisibility(View.VISIBLE);
+            bottomContainer.setVisibility(View.GONE);
+            targetContainer = leftContainer;
+        } else {
+            // 横版：按钮在底部
+            bottomContainer.addView(buttonsView);
+            bottomContainer.setVisibility(View.VISIBLE);
+            leftContainer.setVisibility(View.GONE);
+            targetContainer = bottomContainer;
+        }
+
+        // 重新获取按钮引用
+        btnStartRecord = targetContainer.findViewById(R.id.btn_start_record);
+        btnExit = targetContainer.findViewById(R.id.btn_exit);
+        btnTakePhoto = targetContainer.findViewById(R.id.btn_take_photo);
+
+        // 设置按钮点击事件
+        if (btnStartRecord != null) {
+            btnStartRecord.setOnClickListener(v -> toggleRecording());
+        }
+        if (btnExit != null) {
+            btnExit.setOnClickListener(v -> exitApp());
+        }
+        if (btnTakePhoto != null) {
+            btnTakePhoto.setOnClickListener(v -> takePicture());
+        }
+
+        // 设置其他快捷按钮
+        View btnVideoPlayback = targetContainer.findViewById(R.id.btn_video_playback);
+        if (btnVideoPlayback != null) {
+            btnVideoPlayback.setOnClickListener(v -> showPlaybackInterface());
+        }
+
+        View btnPhotoPlayback = targetContainer.findViewById(R.id.btn_photo_playback);
+        if (btnPhotoPlayback != null) {
+            btnPhotoPlayback.setOnClickListener(v -> showPhotoPlaybackInterface());
+        }
+
+        View btnSettings = targetContainer.findViewById(R.id.btn_settings);
+        if (btnSettings != null) {
+            btnSettings.setOnClickListener(v -> showSettingsInterface());
+        }
+
+        // 菜单按钮（标准按钮样式有此按钮）
+        View btnMenu = targetContainer.findViewById(R.id.btn_menu);
+        if (btnMenu != null) {
+            btnMenu.setOnClickListener(v -> {
+                if (drawerLayout != null) {
+                    if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                        drawerLayout.closeDrawer(GravityCompat.START);
+                    } else {
+                        drawerLayout.openDrawer(GravityCompat.START);
+                    }
+                }
+            });
+        }
+    }
+
     /**
      * 初始化录制状态显示
      */
@@ -1429,6 +1659,49 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         });
         
         AppLog.d(TAG, "RemoteCommandDispatcher 初始化完成");
+
+        // 从 RemoteServiceManager 同步已运行服务的 API 客户端
+        // 这确保 Activity 重建后，远程命令处理器能正确使用已有的 API 客户端
+        syncApiClientsFromRemoteServiceManager();
+    }
+
+    /**
+     * 从 RemoteServiceManager 同步已运行服务的 API 客户端
+     * 在 Activity 重建时，远程服务可能已在运行，需要同步到新的 remoteCommandDispatcher
+     */
+    private void syncApiClientsFromRemoteServiceManager() {
+        if (remoteCommandDispatcher == null) {
+            return;
+        }
+
+        RemoteServiceManager serviceManager = RemoteServiceManager.getInstance();
+
+        // 同步钉钉 API 客户端
+        DingTalkApiClient dingTalk = serviceManager.getDingTalkApiClient();
+        if (dingTalk != null) {
+            remoteCommandDispatcher.setDingTalkApiClient(dingTalk);
+            this.dingTalkApiClient = dingTalk;  // 同时更新本地引用
+            this.dingTalkStreamManager = serviceManager.getDingTalkStreamManager();
+            AppLog.d(TAG, "从 RemoteServiceManager 同步钉钉 API 客户端");
+        }
+
+        // 同步 Telegram API 客户端
+        com.kooo.evcam.telegram.TelegramApiClient telegram = serviceManager.getTelegramApiClient();
+        if (telegram != null) {
+            remoteCommandDispatcher.setTelegramApiClient(telegram);
+            this.telegramApiClient = telegram;
+            this.telegramBotManager = serviceManager.getTelegramBotManager();
+            AppLog.d(TAG, "从 RemoteServiceManager 同步 Telegram API 客户端");
+        }
+
+        // 同步飞书 API 客户端
+        com.kooo.evcam.feishu.FeishuApiClient feishu = serviceManager.getFeishuApiClient();
+        if (feishu != null) {
+            remoteCommandDispatcher.setFeishuApiClient(feishu);
+            this.feishuApiClient = feishu;
+            this.feishuBotManager = serviceManager.getFeishuBotManager();
+            AppLog.d(TAG, "从 RemoteServiceManager 同步飞书 API 客户端");
+        }
     }
     
     /**
@@ -1480,6 +1753,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             } else if (itemId == R.id.nav_wechat_mini) {
                 // 显示微信小程序界面
                 showWechatMiniInterface();
+            } else if (itemId == R.id.nav_heartbeat) {
+                // 显示心跳推图界面
+                showHeartbeatInterface();
             } else if (itemId == R.id.nav_settings) {
                 showSettingsInterface();
             }
@@ -1649,12 +1925,12 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             AppLog.e(TAG, "ImageView is null, cannot load branch qrcode");
             return;
         }
-        
+
         // 根据屏幕密度动态设置二维码尺寸
         android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
         float density = dm.density;
         int screenWidthPx = dm.widthPixels;
-        
+
         // 计算二维码尺寸（像素）- 使用与原二维码相同的尺寸
         int qrcodeSizePx;
         if (density <= 1.0f) {
@@ -1666,9 +1942,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         } else {
             qrcodeSizePx = (int) (screenWidthPx * 0.18f);
         }
-        
+
         AppLog.d(TAG, "设置分支二维码尺寸: " + qrcodeSizePx + "px");
-        
+
         // 设置ImageView尺寸
         android.view.ViewGroup.LayoutParams params = imageView.getLayoutParams();
         if (params == null) {
@@ -1678,7 +1954,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             params.height = qrcodeSizePx;
         }
         imageView.setLayoutParams(params);
-        
+
         // 从assets目录加载图片
         new Thread(() -> {
             try {
@@ -1686,7 +1962,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 java.io.InputStream is = getAssets().open("donatee.jpg");
                 final android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeStream(is);
                 is.close();
-                
+
                 // 在主线程更新UI
                 if (bitmap != null) {
                     AppLog.d(TAG, "分支维护者二维码图片加载成功，尺寸: " + bitmap.getWidth() + "x" + bitmap.getHeight());
@@ -1733,32 +2009,32 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     }
 
     /**
-     * 显示回看界面
+     * 显示回看界面（新版四宫格界面）
      */
     private void showPlaybackInterface() {
         // 隐藏录制布局，显示Fragment容器
         recordingLayout.setVisibility(View.GONE);
         fragmentContainer.setVisibility(View.VISIBLE);
 
-        // 显示PlaybackFragment
+        // 显示新版PlaybackFragment（支持四宫格预览）
         FragmentManager fragmentManager = getSupportFragmentManager();
         FragmentTransaction transaction = fragmentManager.beginTransaction();
-        transaction.replace(R.id.fragment_container, new PlaybackFragment());
+        transaction.replace(R.id.fragment_container, new PlaybackFragmentNew());
         transaction.commit();
     }
 
     /**
-     * 显示图片回看界面
+     * 显示图片回看界面（新版四宫格界面）
      */
     private void showPhotoPlaybackInterface() {
         // 隐藏录制布局，显示Fragment容器
         recordingLayout.setVisibility(View.GONE);
         fragmentContainer.setVisibility(View.VISIBLE);
 
-        // 显示PhotoPlaybackFragment
+        // 显示新版PhotoPlaybackFragment（支持四宫格预览）
         FragmentManager fragmentManager = getSupportFragmentManager();
         FragmentTransaction transaction = fragmentManager.beginTransaction();
-        transaction.replace(R.id.fragment_container, new PhotoPlaybackFragment());
+        transaction.replace(R.id.fragment_container, new PhotoPlaybackFragmentNew());
         transaction.commit();
     }
 
@@ -1822,6 +2098,21 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         transaction.commit();
     }
     
+    /**
+     * 显示心跳推图界面
+     */
+    private void showHeartbeatInterface() {
+        // 隐藏录制布局，显示Fragment容器
+        recordingLayout.setVisibility(View.GONE);
+        fragmentContainer.setVisibility(View.VISIBLE);
+
+        // 显示 HeartbeatFragment
+        FragmentManager fragmentManager = getSupportFragmentManager();
+        FragmentTransaction transaction = fragmentManager.beginTransaction();
+        transaction.replace(R.id.fragment_container, new com.kooo.evcam.heartbeat.HeartbeatFragment());
+        transaction.commit();
+    }
+
     /**
      * 获取微信远程管理器（供 Fragment 调用）
      */
@@ -1928,6 +2219,13 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     private void executeWechatCommand(String action, String commandId, int durationSeconds) {
         if (wechatRemoteManager != null) {
             wechatRemoteManager.setCommandExecutor(this);
+
+            // 确保微信云服务已启动（Activity 重建后可能未启动）
+            if (!wechatRemoteManager.isRunning() && wechatMiniConfig != null && wechatMiniConfig.isCloudConfigured()) {
+                AppLog.d(TAG, "微信云服务未运行，尝试启动...");
+                wechatRemoteManager.startService();
+            }
+
             wechatRemoteManager.executeCommandFromIntent(action, commandId, durationSeconds);
         }
     }
@@ -2045,15 +2343,15 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             AppLog.d(TAG, "Camera already initialized, skipping");
             return;
         }
-        
+
         // 领克07/08专用：第一次启动摄像头预览时延迟5秒，给摄像头启动时间
         if (appConfig != null && appConfig.isFirstCameraPreview()) {
             AppLog.d(TAG, "领克07/08车型首次启动摄像头预览，延迟5秒等待摄像头启动...");
             Toast.makeText(this, "正在初始化摄像头，请稍候...", Toast.LENGTH_LONG).show();
-            
+
             // 标记首次预览已完成
             appConfig.setFirstCameraPreviewCompleted();
-            
+
             // 延迟5秒后执行实际初始化
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                 AppLog.d(TAG, "延迟完成，开始初始化摄像头");
@@ -2062,11 +2360,11 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             }, 5000);
             return;
         }
-        
+
         // 非首次启动或非领克07/08车型，直接初始化
         initCameraInternal();
     }
-    
+
     /**
      * 实际执行摄像头初始化的内部方法
      */
@@ -2197,37 +2495,66 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                         break;
                 }
                 if (textureView != null) {
-                    // 判断是否需要旋转
-                    boolean needRotation = "left".equals(cameraKey) || "right".equals(cameraKey);
+                    String carModel = appConfig.getCarModel();
 
-                    if (needRotation) {
-                        // 左右摄像头：容器使用旋转后的宽高比（800x1280，竖向）
-                        textureView.setAspectRatio(previewSize.getHeight(), previewSize.getWidth());
-                        AppLog.d(TAG, "设置 " + cameraKey + " 宽高比(旋转后): " + previewSize.getHeight() + ":" + previewSize.getWidth());
+                    // 自定义车型：保持原始状态，不旋转、不镜像，所有调节在自由调节界面进行
+                    if (appConfig.isCustomCarModel()) {
+                        // 使用原始宽高比，不应用任何旋转
+                        textureView.setAspectRatio(previewSize.getWidth(), previewSize.getHeight());
+                        textureView.setFillContainer(true);  // 使用填充模式，无黑边
 
-                        // 应用旋转变换（修正倒立问题）
-                        int rotation = "left".equals(cameraKey) ? 270 : 90;  // 左顺时针270度(270)，右顺时针90度(90)
-                        applyRotationTransform(textureView, previewSize, rotation, cameraKey);
-                    } else {
-                        // 前后摄像头
-                        String carModel = appConfig.getCarModel();
-                        
-                        // 手机车型：预览是竖向的，需要应用缩放变换保持比例
-                        if (AppConfig.CAR_MODEL_PHONE.equals(carModel)) {
-                            // 手机竖屏模式：应用缩放变换保持宽高比
-                            textureView.setFillContainer(false);
-                            applyPhoneScaleTransform(textureView, previewSize, cameraKey);
-                            AppLog.d(TAG, "设置 " + cameraKey + " 手机缩放变换, 预览尺寸: " + previewSize.getWidth() + "x" + previewSize.getHeight());
+                        AppLog.d(TAG, "设置 " + cameraKey + " 宽高比(自定义-填充): " + previewSize.getWidth() + "x" + previewSize.getHeight());
+
+                        // 更新布局管理器中的宽高比信息（不旋转）
+                        if (customLayoutManager != null) {
+                            customLayoutManager.updateCameraAspectRatio(cameraKey, previewSize.getWidth(), previewSize.getHeight(), 0);
+                        }
+                    }
+                    // L7/L6车型：左右摄像头需要旋转
+                    else if (AppConfig.CAR_MODEL_L7.equals(carModel) || AppConfig.CAR_MODEL_L7_MULTI.equals(carModel)) {
+                        boolean needRotation = "left".equals(cameraKey) || "right".equals(cameraKey);
+
+                        if (needRotation) {
+                            // 左右摄像头：容器使用旋转后的宽高比（800x1280，竖向）
+                            textureView.setAspectRatio(previewSize.getHeight(), previewSize.getWidth());
+                            AppLog.d(TAG, "设置 " + cameraKey + " 宽高比(旋转后): " + previewSize.getHeight() + ":" + previewSize.getWidth());
+
+                            // 应用旋转变换（修正倒立问题）
+                            int rotation = "left".equals(cameraKey) ? 270 : 90;
+                            applyRotationTransform(textureView, previewSize, rotation, cameraKey);
                         } else {
-                            // 其他车型：使用原始宽高比（1280x800，横向）
+                            // 前后摄像头：使用原始宽高比
+                            textureView.setAspectRatio(previewSize.getWidth(), previewSize.getHeight());
+                            textureView.setFillContainer(false);
+                            AppLog.d(TAG, "设置 " + cameraKey + " 宽高比: " + previewSize.getWidth() + ":" + previewSize.getHeight() + ", 适应模式");
+                        }
+                    }
+                    // 手机车型：预览是竖向的，需要应用缩放变换保持比例
+                    else if (AppConfig.CAR_MODEL_PHONE.equals(carModel)) {
+                        textureView.setFillContainer(false);
+                        applyPhoneScaleTransform(textureView, previewSize, cameraKey);
+                        AppLog.d(TAG, "设置 " + cameraKey + " 手机缩放变换, 预览尺寸: " + previewSize.getWidth() + "x" + previewSize.getHeight());
+                    }
+                    // 其他车型（E5等）：左右摄像头也需要旋转
+                    else {
+                        boolean needRotation = "left".equals(cameraKey) || "right".equals(cameraKey);
+
+                        if (needRotation) {
+                            // 左右摄像头：容器使用旋转后的宽高比（800x1280，竖向）
+                            textureView.setAspectRatio(previewSize.getHeight(), previewSize.getWidth());
+                            AppLog.d(TAG, "设置 " + cameraKey + " 宽高比(E5旋转后): " + previewSize.getHeight() + ":" + previewSize.getWidth());
+
+                            // 应用旋转变换（修正倒立问题）
+                            int rotation = "left".equals(cameraKey) ? 270 : 90;
+                            applyRotationTransform(textureView, previewSize, rotation, cameraKey);
+                        } else {
+                            // 前后摄像头：使用原始宽高比
                             textureView.setAspectRatio(previewSize.getWidth(), previewSize.getHeight());
                             
                             // 根据车型和摄像头数量决定显示模式
                             // L7车型（包括L7-多按钮）和1摄/2摄模式：使用适应模式，完整显示画面
                             // E5的4摄模式：启用填满模式，避免黑边
-                            boolean isL7Layout = AppConfig.CAR_MODEL_L7.equals(carModel) || AppConfig.CAR_MODEL_L7_MULTI.equals(carModel);
-                            boolean useFillMode = configuredCameraCount >= 4 && !isL7Layout;
-                            
+                            boolean useFillMode = configuredCameraCount >= 4;
                             if (useFillMode) {
                                 // 4摄模式（E5）：启用填满模式，避免黑边
                                 textureView.setFillContainer(true);
@@ -2382,6 +2709,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 } else if (AppConfig.CAR_MODEL_PHONE.equals(carModel)) {
                     // 手机模式：2摄像头（前+后）
                     initCamerasForPhone(cameraIds);
+                } else if (AppConfig.CAR_MODEL_XINGHAN_7.equals(carModel)) {
+                    // 26款星舰7：使用固定映射（前3后2左4右1）
+                    initCamerasForXinghan7(cameraIds);
                 } else if (AppConfig.CAR_MODEL_LYNKCO_08_PLUS.equals(carModel) || appConfig.isCustomCarModel()) {
                     // 领克08加包 / 自定义车型：使用配置的摄像头映射（领克08加包会从 getCameraId 获取避开 camera0 的默认值）
                     initCamerasForCustomModel(cameraIds);
@@ -2402,6 +2732,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 
                 // 注册摄像头到亮度/降噪调节管理器
                 registerCamerasToImageAdjustManager();
+
+                // 初始化心跳推图管理器
+                initHeartbeatManager();
 
                 AppLog.d(TAG, "Camera initialized with " + configuredCameraCount + " cameras");
                 //Toast.makeText(this, "已打开 " + configuredCameraCount + " 个摄像头", Toast.LENGTH_SHORT).show();
@@ -2455,7 +2788,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     }
     
     // ==================== 领克07 5镜头交互方法 ====================
-    
+
     /**
      * 初始化领克07专用的5镜头交互界面
      */
@@ -2463,13 +2796,13 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         // 获取主画面TextureView
         textureMain = findViewById(R.id.texture_main);
         labelMain = findViewById(R.id.label_main);
-        
+
         // 获取四个角落的容器（用于点击事件）
         previewTopLeftContainer = findViewById(R.id.preview_top_left_container);
         previewTopRightContainer = findViewById(R.id.preview_top_right_container);
         previewBottomLeftContainer = findViewById(R.id.preview_bottom_left_container);
         previewBottomRightContainer = findViewById(R.id.preview_bottom_right_container);
-        
+
         // 设置点击事件：点击小画面切换到主画面
         if (previewTopLeftContainer != null) {
             previewTopLeftContainer.setOnClickListener(v -> switchMainPreview("front"));
@@ -2483,7 +2816,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         if (previewBottomRightContainer != null) {
             previewBottomRightContainer.setOnClickListener(v -> switchMainPreview("right"));
         }
-        
+
         // 点击主画面切换回完整视图
         View mainPreviewContainer = findViewById(R.id.main_preview_container);
         if (mainPreviewContainer != null) {
@@ -2493,10 +2826,10 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 }
             });
         }
-        
+
         AppLog.d(TAG, "领克07 5镜头交互界面初始化完成");
     }
-    
+
     /**
      * 切换主画面显示的内容
      * @param targetType 目标类型：full（完整）/ front / back / left / right
@@ -2505,15 +2838,15 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         if (targetType.equals(currentMainViewType)) {
             return;  // 已经是当前类型，无需切换
         }
-        
+
         AppLog.d(TAG, "切换主画面: " + currentMainViewType + " -> " + targetType);
-        
+
         // 获取目标位置的裁切区域
         float[] targetCropRegion = null;
         String targetLabel = "完整";
         View targetContainer = null;
         AutoFitTextureView targetTextureView = null;
-        
+
         switch (targetType) {
             case "front":
                 targetCropRegion = AppConfig.getPanoramicCropRegion("front");
@@ -2545,7 +2878,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 targetLabel = "完整";
                 break;
         }
-        
+
         // 更新主画面：使用变换矩阵裁切
         if (textureMain != null) {
             if (targetCropRegion != null) {
@@ -2557,7 +2890,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 AppLog.d(TAG, "主画面：显示完整");
             }
         }
-        
+
         // 如果之前主画面显示的是裁切视角，需要将完整画面移到那个位置
         if (!"full".equals(currentMainViewType) && targetTextureView != null) {
             // 将原来主画面显示的内容（裁切视角）保持不变
@@ -2574,19 +2907,19 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 }
             }
         }
-        
+
         // 更新标签
         if (labelMain != null) {
             labelMain.setText(targetLabel);
         }
-        
+
         // 更新当前状态
         currentMainViewType = targetType;
-        
+
         // 更新边框高亮（可选：高亮当前选中的小画面）
         updatePreviewBorderHighlight(targetType);
     }
-    
+
     /**
      * 根据类型获取对应的容器
      */
@@ -2599,7 +2932,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             default: return null;
         }
     }
-    
+
     /**
      * 根据类型获取对应的TextureView
      */
@@ -2612,7 +2945,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             default: return null;
         }
     }
-    
+
     /**
      * 应用全景裁切变换到 TextureView
      * @param view 目标 TextureView
@@ -2626,66 +2959,66 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             android.util.Log.w("MainActivity", "applySimpleCrop: view 或 cropRegion 为 null");
             return;
         }
-        
+
         if (!view.isAvailable()) {
             android.util.Log.w("MainActivity", "applySimpleCrop: TextureView 不可用");
             return;
         }
-        
+
         // 裁切区域（归一化坐标）
         float cropX = cropRegion[0];
         float cropY = cropRegion[1];
         float cropW = cropRegion[2];
         float cropH = cropRegion[3];
-        
+
         int viewWidth = view.getWidth();
         int viewHeight = view.getHeight();
-        
-        android.util.Log.d("MainActivity", direction + " 裁切前 - 视图尺寸:" + viewWidth + "x" + viewHeight + 
+
+        android.util.Log.d("MainActivity", direction + " 裁切前 - 视图尺寸:" + viewWidth + "x" + viewHeight +
                 ", 裁切区域:[" + cropX + "," + cropY + "," + cropW + "," + cropH + "]");
-        
+
         if (viewWidth == 0 || viewHeight == 0) {
             android.util.Log.w("MainActivity", "视图尺寸为0，延迟应用变换");
             // 延迟100ms后重试
             view.post(() -> applySimpleCrop(view, cropRegion, direction));
             return;
         }
-        
+
         // 创建变换矩阵
         android.graphics.Matrix matrix = new android.graphics.Matrix();
-        
+
         // 放大2倍（因为只显示50%的区域）
         float scale = 2.0f;
         matrix.setScale(scale, scale);
-        
+
         // 平移到目标区域
         float translateX = -cropX * viewWidth * scale;
         float translateY = -cropY * viewHeight * scale;
         matrix.postTranslate(translateX, translateY);
-        
-        android.util.Log.d("MainActivity", direction + " 裁切应用 - 缩放:" + scale + 
+
+        android.util.Log.d("MainActivity", direction + " 裁切应用 - 缩放:" + scale +
                 ", 平移:[" + translateX + "," + translateY + "]");
-        
+
         view.setTransform(matrix);
     }
-    
+
     private void applyPanoramicTransform(TextureView view, float[] cropRegion, String direction) {
         if (view == null || cropRegion == null || !view.isAvailable()) {
             return;
         }
-        
+
         int viewWidth = view.getWidth();
         int viewHeight = view.getHeight();
         if (viewWidth == 0 || viewHeight == 0) {
             return;
         }
-        
+
         // 裁切区域（归一化坐标：x, y, width, height）
         float cropX = cropRegion[0];
         float cropY = cropRegion[1];
         float cropW = cropRegion[2];
         float cropH = cropRegion[3];
-        
+
         // 获取实际的预览尺寸
         SingleCamera camera = cameraManager != null ? cameraManager.getCamera("front") : null;
         int previewWidth = 2560;
@@ -2697,23 +3030,23 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         } else {
             android.util.Log.w("MainActivity", "无法获取预览尺寸，使用默认值 2560x1600");
         }
-        
+
         android.util.Log.d("MainActivity", direction + " 变换 - 裁切:[" + cropX + "," + cropY + "," + cropW + "," + cropH + "], 视图:" + viewWidth + "x" + viewHeight);
-        
+
         // 最简单的变换：固定缩放 + 平移
         android.graphics.Matrix matrix = new android.graphics.Matrix();
-        
+
         // 固定缩放比例 2.0（所有象限都是 0.5，需要放大2倍）
         float scale = 2.0f;
         matrix.setScale(scale, scale);
-        
+
         // 简单平移：将裁切区域移到左上角
         float translateX = -cropX * previewWidth * scale;
         float translateY = -cropY * previewHeight * scale;
         matrix.postTranslate(translateX, translateY);
-        
+
         android.util.Log.d("MainActivity", direction + " 变换应用 - 缩放:" + scale + ", 平移:[" + translateX + "," + translateY + "]");
-        
+
         view.setTransform(matrix);
     }
 
@@ -2739,7 +3072,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 "right".equals(selectedType) ? R.drawable.preview_border_selected : R.drawable.preview_border);
         }
     }
-    
+
     /**
      * 领克07/08车型：5镜头交互模式
      * 中间显示完整画面，四角显示裁切画面（前/后/左/右）
@@ -2749,9 +3082,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         // 强制禁用鱼眼矫正
         boolean fisheyeEnabled = false;
         int fisheyeRatio = 0;
-        
+
         String frontId = appConfig.getCameraId("front");
-        
+
         // 验证摄像头ID有效性
         boolean validId = false;
         for (String id : cameraIds) {
@@ -2760,33 +3093,33 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 break;
             }
         }
-        
+
         if (!validId && cameraIds.length > 0) {
             frontId = cameraIds[0];
             AppLog.w(TAG, "领克07配置的摄像头ID无效，使用默认摄像头: " + frontId);
         }
-        
+
         if (frontId == null) {
             Toast.makeText(this, "没有可用的摄像头", Toast.LENGTH_SHORT).show();
             return;
         }
-        
-        AppLog.d(TAG, "领克07 5镜头模式初始化：摄像头ID=" + frontId + 
+
+        AppLog.d(TAG, "领克07 5镜头模式初始化：摄像头ID=" + frontId +
                 ", 鱼眼矫正=" + (fisheyeEnabled ? "启用(" + fisheyeRatio + "%)" : "禁用"));
-        
+
         if (isLynkCo07Layout && textureMain != null) {
             // 5镜头交互模式：使用全景摄像头初始化
             // textureMain 显示完整画面
             // textureFront/Back/Left/Right 显示四个方向的裁切画面
             cameraManager.initLynkCo07PanoramicCamera(
-                    frontId, 
+                    frontId,
                     textureMain,           // 主画面（完整）
                     textureFront,          // 左上（前）
                     textureBack,           // 右上（后）
                     textureLeft,           // 左下（左）
                     textureRight           // 右下（右）
             );
-            
+
             // 初始状态：主画面显示完整，四角显示裁切
             currentMainViewType = "full";
             if (labelMain != null) {
@@ -2805,7 +3138,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             Toast.makeText(this, "没有可用的摄像头", Toast.LENGTH_SHORT).show();
         }
     }
-    
+
     /**
      * 银河L6/L7车型：使用固定的摄像头映射（竖屏四宫格）
      * 前=2, 后=3, 左=0, 右=1
@@ -2839,7 +3172,49 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             Toast.makeText(this, "没有可用的摄像头", Toast.LENGTH_SHORT).show();
         }
     }
-    
+
+    /**
+     * 26款星舰7车型：使用固定的摄像头映射
+     * 前=3, 后=2, 左=4, 右=1
+     */
+    private void initCamerasForXinghan7(String[] cameraIds) {
+        if (cameraIds.length >= 5) {
+            // 有5个或更多摄像头
+            cameraManager.initCameras(
+                    cameraIds[3], textureFront,  // 前摄像头使用 cameraIds[3]
+                    cameraIds[2], textureBack,   // 后摄像头使用 cameraIds[2]
+                    cameraIds[4], textureLeft,   // 左摄像头使用 cameraIds[4]
+                    cameraIds[1], textureRight   // 右摄像头使用 cameraIds[1]
+            );
+        } else if (cameraIds.length >= 4) {
+            // 只有4个摄像头，使用可用的ID
+            cameraManager.initCameras(
+                    cameraIds[3], textureFront,
+                    cameraIds[2], textureBack,
+                    cameraIds[0], textureLeft,
+                    cameraIds[1], textureRight
+            );
+        } else if (cameraIds.length >= 2) {
+            // 只有2个摄像头，复用到四个位置
+            cameraManager.initCameras(
+                    cameraIds[0], textureFront,
+                    cameraIds[1], textureBack,
+                    cameraIds[0], textureLeft,
+                    cameraIds[1], textureRight
+            );
+        } else if (cameraIds.length == 1) {
+            // 只有1个摄像头，所有位置使用同一个
+            cameraManager.initCameras(
+                    cameraIds[0], textureFront,
+                    cameraIds[0], textureBack,
+                    cameraIds[0], textureLeft,
+                    cameraIds[0], textureRight
+            );
+        } else {
+            Toast.makeText(this, "没有可用的摄像头", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     /**
      * 手机模式：使用前后2个摄像头
      * 与银河E5不同，手机布局只有 textureFront 和 textureBack
@@ -2924,31 +3299,28 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
 
     /**
      * 为自定义车型的摄像头设置旋转角度
+     * 注意：自定义布局默认不旋转、不镜像，所有调节在自由调节界面进行
      */
     private void setCustomRotationForCameras() {
         if (!appConfig.isCustomCarModel()) {
             return;  // 只对自定义车型应用
         }
 
-        // 获取并设置每个摄像头的旋转角度
-        int frontRotation = appConfig.getCameraRotation("front");
-        int backRotation = appConfig.getCameraRotation("back");
-        int leftRotation = appConfig.getCameraRotation("left");
-        int rightRotation = appConfig.getCameraRotation("right");
+        // 自定义布局：默认不应用任何旋转，保持原始状态
+        // 所有旋转、镜像等调节都在自由调节界面进行
+        AppLog.d(TAG, "自定义车型：保持摄像头原始状态，不应用自动旋转");
 
-        AppLog.d(TAG, "设置自定义旋转角度 - 前:" + frontRotation + "° 后:" + backRotation + "° 左:" + leftRotation + "° 右:" + rightRotation + "°");
-
-        // 为每个摄像头设置旋转角度
+        // 明确设置所有摄像头旋转为0
         if (cameraManager != null) {
             SingleCamera frontCamera = cameraManager.getCamera("front");
             SingleCamera backCamera = cameraManager.getCamera("back");
             SingleCamera leftCamera = cameraManager.getCamera("left");
             SingleCamera rightCamera = cameraManager.getCamera("right");
 
-            if (frontCamera != null) frontCamera.setCustomRotation(frontRotation);
-            if (backCamera != null) backCamera.setCustomRotation(backRotation);
-            if (leftCamera != null) leftCamera.setCustomRotation(leftRotation);
-            if (rightCamera != null) rightCamera.setCustomRotation(rightRotation);
+            if (frontCamera != null) frontCamera.setCustomRotation(0);
+            if (backCamera != null) backCamera.setCustomRotation(0);
+            if (leftCamera != null) leftCamera.setCustomRotation(0);
+            if (rightCamera != null) rightCamera.setCustomRotation(0);
         }
     }
 
@@ -3174,6 +3546,34 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         registerReceiver(screenStateReceiver, filter);
         
         AppLog.d(TAG, "息屏状态广播接收器已注册");
+
+        // 初始化后台切换广播接收器
+        initBackgroundCommandReceiver();
+    }
+
+    /**
+     * 初始化后台切换广播接收器
+     * 用于接收远程"后台"指令，避免使用 startActivity 导致闪屏
+     */
+    private void initBackgroundCommandReceiver() {
+        backgroundCommandReceiver = new android.content.BroadcastReceiver() {
+            @Override
+            public void onReceive(android.content.Context context, android.content.Intent intent) {
+                String action = intent.getAction();
+                if (WakeUpHelper.ACTION_MOVE_TO_BACKGROUND.equals(action)) {
+                    AppLog.d(TAG, "收到后台切换广播");
+                    // 直接退到后台，无需启动 Activity
+                    moveTaskToBack(true);
+                    AppLog.d(TAG, "应用已切换到后台（通过广播）");
+                }
+            }
+        };
+
+        android.content.IntentFilter filter = new android.content.IntentFilter();
+        filter.addAction(WakeUpHelper.ACTION_MOVE_TO_BACKGROUND);
+        registerReceiver(backgroundCommandReceiver, filter);
+
+        AppLog.d(TAG, "后台切换广播接收器已注册");
     }
     
     /**
@@ -3183,6 +3583,11 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         isScreenOff = true;
         AppLog.d(TAG, "检测到息屏");
         
+        // 通知心跳管理器屏幕状态（由 HeartbeatManager 处理息屏推图逻辑）
+        if (heartbeatManager != null) {
+            heartbeatManager.onScreenOff();
+        }
+
         // 取消可能存在的亮屏恢复录制任务
         if (screenOnStartRunnable != null) {
             screenStateHandler.removeCallbacks(screenOnStartRunnable);
@@ -3314,6 +3719,11 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         isScreenOff = false;
         AppLog.d(TAG, "检测到亮屏");
         
+        // 通知心跳管理器屏幕状态（由 HeartbeatManager 处理停止息屏推图）
+        if (heartbeatManager != null) {
+            heartbeatManager.onScreenOn();
+        }
+
         // 取消可能存在的息屏停止录制任务
         if (screenOffStopRunnable != null) {
             screenStateHandler.removeCallbacks(screenOffStopRunnable);
@@ -3788,6 +4198,16 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             public String onExitCommand(boolean confirmed) {
                 return handleExitCommand(confirmed);
             }
+
+            @Override
+            public String onForegroundCommand() {
+                return handleForegroundCommand();
+            }
+
+            @Override
+            public String onBackgroundCommand() {
+                return handleBackgroundCommand();
+            }
         };
 
         // 创建并启动 Stream 管理器（启用自动重连）
@@ -3927,6 +4347,16 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             @Override
             public String onExitCommand(boolean confirmed) {
                 return handleExitCommand(confirmed);
+            }
+
+            @Override
+            public String onForegroundCommand() {
+                return handleForegroundCommand();
+            }
+
+            @Override
+            public String onBackgroundCommand() {
+                return handleBackgroundCommand();
             }
         };
 
@@ -4080,6 +4510,16 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             public String onExitCommand(boolean confirmed) {
                 return handleExitCommand(confirmed);
             }
+
+            @Override
+            public String onForegroundCommand() {
+                return handleForegroundCommand();
+            }
+
+            @Override
+            public String onBackgroundCommand() {
+                return handleBackgroundCommand();
+            }
         };
 
         // 创建并启动 Bot 管理器
@@ -4192,7 +4632,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 // 忽略存储获取错误
             }
             
-            // 应用状态
+            // 应用状态（基于 Activity 生命周期）
+            // isInBackground 在 onPause() 时设为 true，onResume() 时设为 false
+            // moveTaskToBack() 会触发 onPause()，所以这个判断是准确的
             sb.append("📱 应用: ").append(isInBackground ? "后台" : "前台").append("\n");
             
             // 分隔线
@@ -4208,6 +4650,24 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             }
             sb.append("\n");
             
+            // 心跳推图
+            if (heartbeatManager != null) {
+                com.kooo.evcam.heartbeat.HeartbeatConfig hbConfig = heartbeatManager.getConfig();
+                if (hbConfig.isEnabled()) {
+                    sb.append("• 心跳推图: 开");
+                    if (hbConfig.isScreenOnPushEnabled() && hbConfig.isScreenOffPushEnabled()) {
+                        sb.append("（亮屏+息屏）");
+                    } else if (hbConfig.isScreenOnPushEnabled()) {
+                        sb.append("（亮屏）");
+                    } else if (hbConfig.isScreenOffPushEnabled()) {
+                        sb.append("（息屏）");
+                    }
+                    sb.append("\n");
+                } else {
+                    sb.append("• 心跳推图: 关\n");
+                }
+            }
+
             // 分段时长
             int segmentMin = appConfig.getSegmentDurationMinutes();
             sb.append("• 分段时长: ").append(segmentMin).append("分钟\n");
@@ -4269,6 +4729,35 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         WakeUpHelper.launchForStopRecording(this);
         
         return "⏹️ 录制已停止" + durationInfo + "\n应用将退到后台";
+    }
+
+    /**
+     * 处理前台指令
+     * 将应用切换到前台
+     */
+    private String handleForegroundCommand() {
+        AppLog.d(TAG, "处理前台指令");
+
+        // 使用 WakeUpHelper 将应用唤醒到前台
+        WakeUpHelper.launchForForeground(this);
+
+        return "📱 应用已切换到前台";
+    }
+
+    /**
+     * 处理后台指令
+     * 将应用切换到后台
+     */
+    private String handleBackgroundCommand() {
+        AppLog.d(TAG, "处理后台指令");
+
+        // 在主线程中执行退到后台
+        runOnUiThread(() -> {
+            moveTaskToBack(true);
+            AppLog.d(TAG, "应用已切换到后台");
+        });
+
+        return "📴 应用已切换到后台";
     }
 
     /**
@@ -4363,6 +4852,11 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         isInBackground = true;
         AppLog.d(TAG, "onPause called, isRecording=" + isRecording);
         
+        // 暂停心跳推图（进入后台时）
+        if (heartbeatManager != null) {
+            heartbeatManager.pause();
+        }
+
         // 通知悬浮窗服务：应用进入后台，显示悬浮窗
         if (appConfig.isFloatingWindowEnabled()) {
             FloatingWindowService.sendAppForegroundState(this, false);
@@ -4370,9 +4864,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         
         // 根据是否正在录制，决定如何处理摄像头
         if (cameraManager != null) {
-            if (isRecording) {
-                // 正在录制：保持摄像头连接（有前台服务保护）
-                AppLog.d(TAG, "Recording in progress, keeping cameras connected (protected by foreground service)");
+            if (isRecording || isRemoteRecording) {
+                // 正在录制（手动或远程）：保持摄像头连接（有前台服务保护）
+                AppLog.d(TAG, "Recording in progress (manual=" + isRecording + ", remote=" + isRemoteRecording + "), keeping cameras connected");
             } else if (isAutoRecordingPending) {
                 // 自动录制正在等待中：保持摄像头连接（开机自启动场景）
                 AppLog.d(TAG, "Auto recording pending, keeping cameras connected for startup recording");
@@ -4412,7 +4906,13 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         super.onResume();
         boolean wasInBackground = isInBackground;
         isInBackground = false;
-        AppLog.d(TAG, "onResume called, wasInBackground=" + wasInBackground + ", isRecording=" + isRecording);
+
+        // 标记 Activity 已经完全恢复过一次（用于区分新创建和已存在的 Activity）
+        // 这个标记在 onCreate 后第一次 onResume 时设为 true
+        boolean wasFirstResume = !hasBeenResumedOnce;
+        hasBeenResumedOnce = true;
+
+        AppLog.d(TAG, "onResume called, wasInBackground=" + wasInBackground + ", isRecording=" + isRecording + ", firstResume=" + wasFirstResume);
         
         // 通知悬浮窗服务：应用进入前台，隐藏悬浮窗
         if (appConfig.isFloatingWindowEnabled()) {
@@ -4448,8 +4948,20 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 } else {
                     AppLog.d(TAG, "Recording in progress, cameras should still be connected");
                 }
+
+                // 启动心跳推图（返回前台时，如果已启用）
+                if (heartbeatManager != null && heartbeatManager.getConfig().isEnabled()) {
+                    // 延迟启动，等待摄像头准备好
+                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                        if (heartbeatManager != null && !isInBackground) {
+                            heartbeatManager.start();
+                        }
+                    }, 1500);
+                }
             }, 500);
         }
+        // 注意：心跳服务自启动逻辑已移至 initHeartbeatManager() 中
+        // 因为 onResume 执行时 HeartbeatManager 可能还没有初始化
     }
 
     @Override
@@ -4474,6 +4986,12 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             remoteCommandDispatcher.cleanup();
         }
         
+        // 清理心跳推图管理器
+        if (heartbeatManager != null) {
+            heartbeatManager.destroy();
+            heartbeatManager = null;
+        }
+
         // 清理息屏录制相关资源
         if (screenStateReceiver != null) {
             try {
@@ -4482,6 +5000,16 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
                 AppLog.w(TAG, "注销息屏广播接收器时出错: " + e.getMessage());
             }
             screenStateReceiver = null;
+        }
+
+        // 清理后台切换广播接收器
+        if (backgroundCommandReceiver != null) {
+            try {
+                unregisterReceiver(backgroundCommandReceiver);
+            } catch (Exception e) {
+                AppLog.w(TAG, "注销后台切换广播接收器时出错: " + e.getMessage());
+            }
+            backgroundCommandReceiver = null;
         }
         if (screenStateHandler != null) {
             if (screenOffStopRunnable != null) {
@@ -4638,6 +5166,207 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         AppLog.d(TAG, "Registered cameras to ImageAdjustManager, adjust enabled: " + enabled);
     }
     
+    // ==================== 心跳推图相关方法 ====================
+
+    /**
+     * 初始化心跳推图管理器
+     */
+    private void initHeartbeatManager() {
+        if (heartbeatManager == null) {
+            heartbeatManager = new com.kooo.evcam.heartbeat.HeartbeatManager(this);
+        }
+
+        // 设置相机列表（去重，避免同一个物理相机被添加多次）
+        if (cameraManager != null) {
+            List<SingleCamera> cameras = new ArrayList<>();
+            java.util.Set<String> addedCameraIds = new java.util.HashSet<>();
+
+            String[] positions = {"front", "back", "left", "right"};
+            for (String position : positions) {
+                SingleCamera camera = cameraManager.getCamera(position);
+                if (camera != null) {
+                    String cameraId = camera.getCameraId();
+                    // 只添加未添加过的相机（基于物理相机ID去重）
+                    if (!addedCameraIds.contains(cameraId)) {
+                        cameras.add(camera);
+                        addedCameraIds.add(cameraId);
+                        AppLog.d(TAG, "HeartbeatManager 添加相机: position=" + position + ", cameraId=" + cameraId);
+                    }
+                }
+            }
+            heartbeatManager.setCameras(cameras);
+            AppLog.d(TAG, "HeartbeatManager 相机数量: " + cameras.size());
+        }
+
+        // 设置状态提供者
+        heartbeatManager.setStatusProvider(() -> buildHeartbeatStatusJson());
+
+        // 设置 Activity 控制器（用于息屏推图）
+        heartbeatManager.setActivityController(new com.kooo.evcam.heartbeat.HeartbeatManager.ActivityController() {
+            @Override
+            public boolean isInBackground() {
+                return isInBackground;
+            }
+
+            @Override
+            public boolean isRecording() {
+                return isRecording;
+            }
+
+            @Override
+            public boolean shouldKeepForeground() {
+                // 如果开启了自动录制+息屏录制，需要保持前台
+                return appConfig.isAutoStartRecording() && appConfig.isScreenOffRecordingEnabled();
+            }
+
+            @Override
+            public void wakeUpToForeground() {
+                Intent intent = new Intent(MainActivity.this, MainActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                startActivity(intent);
+            }
+
+            @Override
+            public void moveToBackground() {
+                moveTaskToBack(true);
+            }
+
+            @Override
+            public void openCameras() {
+                if (cameraManager != null) {
+                    cameraManager.openAllCameras();
+                }
+            }
+
+            @Override
+            public void closeCameras() {
+                if (cameraManager != null) {
+                    cameraManager.closeAllCameras();
+                }
+            }
+
+            @Override
+            public boolean hasCamerasConnected() {
+                return cameraManager != null && cameraManager.hasConnectedCameras();
+            }
+        });
+
+        AppLog.d(TAG, "HeartbeatManager initialized");
+
+        // 检查是否需要自启动心跳服务
+        // 必须在 HeartbeatManager 初始化完成后执行，不能放在 onResume 中
+        // 因为 onResume 执行时 HeartbeatManager 可能还没有初始化
+        com.kooo.evcam.heartbeat.HeartbeatConfig hbConfig = heartbeatManager.getConfig();
+        if (hbConfig.isAutoStartEnabled() && hbConfig.isConfigured()) {
+            AppLog.d(TAG, "心跳服务自动启动检查：autoStart=true, configured=true");
+            // 延迟启动，等待相机完全就绪
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                if (heartbeatManager != null) {
+                    heartbeatManager.onConfigChanged();
+                }
+            }, 1500);
+        }
+    }
+
+    /**
+     * 获取心跳管理器（供 Fragment 调用）
+     */
+    public com.kooo.evcam.heartbeat.HeartbeatManager getHeartbeatManager() {
+        return heartbeatManager;
+    }
+
+    /**
+     * 获取已连接的摄像头数量
+     */
+    public int getConnectedCameraCount() {
+        if (cameraManager != null) {
+            return cameraManager.getConnectedCameraCount();
+        }
+        return 0;
+    }
+
+    /**
+     * 获取配置的摄像头总数
+     */
+    public int getTotalCameraCount() {
+        return configuredCameraCount;
+    }
+
+    /**
+     * 心跳配置变更时调用（从 HeartbeatFragment 调用）
+     */
+    public void onHeartbeatConfigChanged() {
+        if (heartbeatManager != null) {
+            heartbeatManager.onConfigChanged();
+        }
+    }
+
+    /**
+     * 构建心跳推图的状态 JSON
+     */
+    private String buildHeartbeatStatusJson() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
+
+        // 录制状态
+        sb.append("\"isRecording\":").append(isRecording).append(",");
+        if (isRecording && recordingStartTime > 0) {
+            long elapsed = System.currentTimeMillis() - recordingStartTime;
+            sb.append("\"recordingDurationMs\":").append(elapsed).append(",");
+        }
+
+        // 存储信息
+        try {
+            File storageDir = StorageHelper.getVideoDir(this);
+            long availableSpace = StorageHelper.getAvailableSpace(storageDir);
+            sb.append("\"storageLocation\":\"").append(escapeJsonString(appConfig.getStorageLocation())).append("\",");
+            sb.append("\"availableSpaceBytes\":").append(availableSpace).append(",");
+            sb.append("\"availableSpaceText\":\"").append(escapeJsonString(StorageHelper.formatSize(availableSpace))).append("\",");
+        } catch (Exception e) {
+            sb.append("\"storageLocation\":\"unknown\",");
+            sb.append("\"availableSpaceBytes\":0,");
+            sb.append("\"availableSpaceText\":\"未知\",");
+        }
+
+        // 配置信息
+        sb.append("\"carModel\":\"").append(escapeJsonString(appConfig.getCarModel())).append("\",");
+        sb.append("\"segmentDurationMinutes\":").append(appConfig.getSegmentDurationMinutes()).append(",");
+        sb.append("\"resolution\":\"").append(escapeJsonString(appConfig.getTargetResolution())).append("\",");
+
+        // 相机状态
+        int connectedCameras = cameraManager != null ? cameraManager.getConnectedCameraCount() : 0;
+        sb.append("\"connectedCameras\":").append(connectedCameras).append(",");
+        sb.append("\"totalCameras\":").append(configuredCameraCount).append(",");
+
+        // App 信息
+        try {
+            String versionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            sb.append("\"appVersion\":\"").append(escapeJsonString(versionName)).append("\",");
+        } catch (Exception e) {
+            sb.append("\"appVersion\":\"unknown\",");
+        }
+
+        // 时间戳
+        sb.append("\"timestamp\":").append(System.currentTimeMillis());
+
+        sb.append("}");
+        return sb.toString();
+    }
+
+    /**
+     * 转义 JSON 字符串
+     */
+    private String escapeJsonString(String str) {
+        if (str == null) {
+            return "";
+        }
+        return str.replace("\\", "\\\\")
+                  .replace("\"", "\\\"")
+                  .replace("\n", "\\n")
+                  .replace("\r", "\\r")
+                  .replace("\t", "\\t");
+    }
+
     /**
      * 设置亮度/降噪调节启用状态
      * @param enabled true 表示启用

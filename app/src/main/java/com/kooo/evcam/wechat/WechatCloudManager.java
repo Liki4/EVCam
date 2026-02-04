@@ -155,7 +155,14 @@ public class WechatCloudManager {
                 startHeartbeat();
                 startPolling();
             } else {
-                handleError("获取 access_token 失败");
+                // 初始连接失败，直接通知错误（不走累积错误逻辑）
+                isRunning = false;
+                isConnected = false;
+                AppLog.e(TAG, "初始连接失败：获取 access_token 失败");
+                mainHandler.post(() -> {
+                    connectionCallback.onError("获取 access_token 失败，请检查 AppSecret 是否正确");
+                    connectionCallback.onDisconnected();
+                });
             }
         }).start();
     }

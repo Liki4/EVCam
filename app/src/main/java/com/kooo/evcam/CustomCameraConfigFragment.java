@@ -1,5 +1,7 @@
 package com.kooo.evcam;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraManager;
@@ -19,6 +21,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import com.google.android.material.switchmaterial.SwitchMaterial;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,11 +37,11 @@ public class CustomCameraConfigFragment extends Fragment {
     
     // 摄像头数量选择
     private Spinner cameraCountSpinner;
-    private static final String[] CAMERA_COUNT_OPTIONS = {"4-横屏", "4-竖屏", "2 个", "1 个"};
+    private static final String[] CAMERA_COUNT_OPTIONS = {"4 个摄像头", "2 个摄像头", "1 个摄像头"};
 
-    // 旋转角度选项
-    private static final String[] ROTATION_OPTIONS = {"0°", "90°", "180°", "270°"};
-    private static final int[] ROTATION_VALUES = {0, 90, 180, 270};
+    // 按钮样式选项
+    private static final String[] BUTTON_STYLE_OPTIONS = {"标准按钮", "多按钮"};
+    private static final String[] BUTTON_STYLE_VALUES = {AppConfig.BUTTON_STYLE_STANDARD, AppConfig.BUTTON_STYLE_MULTI};
 
     // 摄像头配置区域
     private LinearLayout configFront, configBack, configLeft, configRight;
@@ -45,19 +49,31 @@ public class CustomCameraConfigFragment extends Fragment {
     // 摄像头编号选择器
     private Spinner spinnerFrontId, spinnerBackId, spinnerLeftId, spinnerRightId;
 
-    // 摄像头旋转角度选择器
-    private Spinner spinnerFrontRotation, spinnerBackRotation, spinnerLeftRotation, spinnerRightRotation;
-
     // 摄像头名称输入框
     private EditText editFrontName, editBackName, editLeftName, editRightName;
+
+    // 自由操控配置
+    private SwitchMaterial switchFreeControl;
+    private Spinner spinnerButtonStyle;
+    
+    // 布局数据编辑
+    private EditText editLayoutData;
+    private Button btnCopyLayout;
+    private Button btnSaveLayout;
     
     // 可用的摄像头ID列表
     private List<String> availableCameraIds = new ArrayList<>();
+    
+    // 是否已完成初始加载（避免加载时触发保存）
+    private boolean configInitialized = false;
     
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_custom_camera_config, container, false);
+        
+        // 重置初始化标记
+        configInitialized = false;
         
         // 初始化应用配置
         if (getContext() != null) {
@@ -84,9 +100,32 @@ public class CustomCameraConfigFragment extends Fragment {
             }
         });
         
-        // 设置保存按钮
-        Button btnSave = view.findViewById(R.id.btn_save);
-        btnSave.setOnClickListener(v -> saveConfig());
+        // 设置重置所有配置按钮
+        Button btnResetAllConfig = view.findViewById(R.id.btn_reset_all_config);
+        if (btnResetAllConfig != null) {
+            btnResetAllConfig.setOnClickListener(v -> resetAllCustomConfig());
+        }
+        
+        // 设置重启按钮
+        Button btnRestartApp = view.findViewById(R.id.btn_restart_app);
+        if (btnRestartApp != null) {
+            btnRestartApp.setOnClickListener(v -> restartApp());
+        }
+        
+        // 设置自动保存监听器
+        setupAutoSaveListeners();
+        
+        // 加载布局数据到编辑框
+        loadLayoutData();
+        
+        // 设置布局数据按钮事件
+        setupLayoutDataButtons();
+        
+        // 延迟设置初始化完成标记，确保 loadSavedConfig 触发的 Spinner 选择不会触发保存
+        view.postDelayed(() -> {
+            configInitialized = true;
+            AppLog.d(TAG, "配置界面初始化完成，自动保存已启用");
+        }, 300);
         
         // 沉浸式状态栏兼容
         View toolbar = view.findViewById(R.id.toolbar);
@@ -116,15 +155,19 @@ public class CustomCameraConfigFragment extends Fragment {
         spinnerLeftId = view.findViewById(R.id.spinner_left_id);
         spinnerRightId = view.findViewById(R.id.spinner_right_id);
 
-        spinnerFrontRotation = view.findViewById(R.id.spinner_front_rotation);
-        spinnerBackRotation = view.findViewById(R.id.spinner_back_rotation);
-        spinnerLeftRotation = view.findViewById(R.id.spinner_left_rotation);
-        spinnerRightRotation = view.findViewById(R.id.spinner_right_rotation);
-
         editFrontName = view.findViewById(R.id.edit_front_name);
         editBackName = view.findViewById(R.id.edit_back_name);
         editLeftName = view.findViewById(R.id.edit_left_name);
         editRightName = view.findViewById(R.id.edit_right_name);
+
+        // 自由操控配置
+        switchFreeControl = view.findViewById(R.id.switch_free_control);
+        spinnerButtonStyle = view.findViewById(R.id.spinner_button_style);
+        
+        // 布局数据编辑
+        editLayoutData = view.findViewById(R.id.edit_layout_data);
+        btnCopyLayout = view.findViewById(R.id.btn_copy_layout);
+        btnSaveLayout = view.findViewById(R.id.btn_save_layout);
     }
     
     /**
@@ -230,28 +273,6 @@ public class CustomCameraConfigFragment extends Fragment {
         countAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         cameraCountSpinner.setAdapter(countAdapter);
         
-        // 摄像头数量选择监听
-        cameraCountSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                // 0: 4-横屏, 1: 4-竖屏, 2: 2个, 3: 1个
-                int count;
-                if (position == 0 || position == 1) {
-                    count = 4;  // 4-横屏 或 4-竖屏
-                } else if (position == 2) {
-                    count = 2;  // 2个
-                } else {
-                    count = 1;  // 1个
-                }
-                updateConfigVisibility(count);
-            }
-            
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-                // 不处理
-            }
-        });
-        
         // 摄像头ID选择器
         ArrayAdapter<String> idAdapter = new ArrayAdapter<>(
                 getContext(),
@@ -265,18 +286,139 @@ public class CustomCameraConfigFragment extends Fragment {
         spinnerLeftId.setAdapter(idAdapter);
         spinnerRightId.setAdapter(idAdapter);
 
-        // 旋转角度选择器
-        ArrayAdapter<String> rotationAdapter = new ArrayAdapter<>(
+        // 按钮样式选择器
+        ArrayAdapter<String> buttonStyleAdapter = new ArrayAdapter<>(
                 getContext(),
                 R.layout.spinner_item,
-                ROTATION_OPTIONS
+                BUTTON_STYLE_OPTIONS
         );
-        rotationAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
-
-        spinnerFrontRotation.setAdapter(rotationAdapter);
-        spinnerBackRotation.setAdapter(rotationAdapter);
-        spinnerLeftRotation.setAdapter(rotationAdapter);
-        spinnerRightRotation.setAdapter(rotationAdapter);
+        buttonStyleAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
+        spinnerButtonStyle.setAdapter(buttonStyleAdapter);
+    }
+    
+    /**
+     * 设置自动保存监听器
+     * 当任何配置项变更时自动保存
+     */
+    /**
+     * 加载布局数据到编辑框
+     */
+    private void loadLayoutData() {
+        if (editLayoutData != null && appConfig != null) {
+            String layoutData = appConfig.getCustomLayoutData();
+            if (layoutData != null && !layoutData.isEmpty()) {
+                editLayoutData.setText(layoutData);
+            } else {
+                editLayoutData.setText("");
+                editLayoutData.setHint("无布局数据");
+            }
+        }
+    }
+    
+    /**
+     * 设置布局数据按钮事件
+     */
+    private void setupLayoutDataButtons() {
+        // 复制按钮
+        if (btnCopyLayout != null) {
+            btnCopyLayout.setOnClickListener(v -> {
+                if (editLayoutData != null && getContext() != null) {
+                    String text = editLayoutData.getText().toString();
+                    if (!text.isEmpty()) {
+                        ClipboardManager clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+                        ClipData clip = ClipData.newPlainText("layout_data", text);
+                        clipboard.setPrimaryClip(clip);
+                        Toast.makeText(getContext(), "布局数据已复制", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(getContext(), "无数据可复制", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        }
+        
+        // 保存按钮
+        if (btnSaveLayout != null) {
+            btnSaveLayout.setOnClickListener(v -> {
+                if (editLayoutData != null && appConfig != null && getContext() != null) {
+                    String text = editLayoutData.getText().toString().trim();
+                    if (!text.isEmpty()) {
+                        // 简单验证 JSON 格式
+                        if (text.startsWith("{") && text.endsWith("}")) {
+                            appConfig.setCustomLayoutData(text);
+                            Toast.makeText(getContext(), "布局数据已保存，重载后生效", Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(getContext(), "无效的 JSON 格式", Toast.LENGTH_SHORT).show();
+                        }
+                    } else {
+                        // 清空布局数据
+                        appConfig.clearCustomLayoutData();
+                        Toast.makeText(getContext(), "布局数据已清空", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        }
+    }
+    
+    private void setupAutoSaveListeners() {
+        // 通用的 Spinner 变更监听器
+        AdapterView.OnItemSelectedListener autoSaveSpinnerListener = new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (configInitialized) {
+                    saveConfig();
+                }
+            }
+            
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        };
+        
+        // 为摄像头数量 Spinner 添加监听
+        cameraCountSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                int count;
+                if (position == 0) {
+                    count = 4;
+                } else if (position == 1) {
+                    count = 2;
+                } else {
+                    count = 1;
+                }
+                updateConfigVisibility(count);
+                if (configInitialized) {
+                    saveConfig();
+                }
+            }
+            
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        
+        spinnerFrontId.setOnItemSelectedListener(autoSaveSpinnerListener);
+        spinnerBackId.setOnItemSelectedListener(autoSaveSpinnerListener);
+        spinnerLeftId.setOnItemSelectedListener(autoSaveSpinnerListener);
+        spinnerRightId.setOnItemSelectedListener(autoSaveSpinnerListener);
+        spinnerButtonStyle.setOnItemSelectedListener(autoSaveSpinnerListener);
+        
+        // Switch 变更监听
+        switchFreeControl.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (configInitialized) {
+                saveConfig();
+            }
+        });
+        
+        // EditText 变更监听（失去焦点时保存）
+        View.OnFocusChangeListener autoSaveFocusListener = (v, hasFocus) -> {
+            if (!hasFocus && configInitialized) {
+                saveConfig();
+            }
+        };
+        
+        editFrontName.setOnFocusChangeListener(autoSaveFocusListener);
+        editBackName.setOnFocusChangeListener(autoSaveFocusListener);
+        editLeftName.setOnFocusChangeListener(autoSaveFocusListener);
+        editRightName.setOnFocusChangeListener(autoSaveFocusListener);
     }
     
     /**
@@ -302,18 +444,16 @@ public class CustomCameraConfigFragment extends Fragment {
             return;
         }
         
-        // 加载摄像头数量和屏幕方向
+        // 加载摄像头数量
         int count = appConfig.getCameraCount();
-        String orientation = appConfig.getScreenOrientation();
         int countIndex;
         
         if (count == 4) {
-            // 4摄像头：根据屏幕方向选择"4-横屏"或"4-竖屏"
-            countIndex = "portrait".equals(orientation) ? 1 : 0;
+            countIndex = 0;  // 4个摄像头
         } else if (count == 2) {
-            countIndex = 2;
+            countIndex = 1;  // 2个摄像头
         } else {
-            countIndex = 3;
+            countIndex = 2;  // 1个摄像头
         }
         
         cameraCountSpinner.setSelection(countIndex);
@@ -325,19 +465,31 @@ public class CustomCameraConfigFragment extends Fragment {
         setSpinnerSelection(spinnerLeftId, appConfig.getCameraId("left"));
         setSpinnerSelection(spinnerRightId, appConfig.getCameraId("right"));
 
-        // 加载摄像头旋转角度
-        setRotationSpinnerSelection(spinnerFrontRotation, appConfig.getCameraRotation("front"));
-        setRotationSpinnerSelection(spinnerBackRotation, appConfig.getCameraRotation("back"));
-        setRotationSpinnerSelection(spinnerLeftRotation, appConfig.getCameraRotation("left"));
-        setRotationSpinnerSelection(spinnerRightRotation, appConfig.getCameraRotation("right"));
-
         // 加载摄像头名称
         editFrontName.setText(appConfig.getCameraName("front"));
         editBackName.setText(appConfig.getCameraName("back"));
         editLeftName.setText(appConfig.getCameraName("left"));
         editRightName.setText(appConfig.getCameraName("right"));
+
+        // 加载自由操控配置
+        switchFreeControl.setChecked(appConfig.isCustomFreeControlEnabled());
+        setButtonStyleSpinnerSelection(spinnerButtonStyle, appConfig.getCustomButtonStyle());
     }
-    
+
+    /**
+     * 设置按钮样式 Spinner 的选中项
+     */
+    private void setButtonStyleSpinnerSelection(Spinner spinner, String style) {
+        int index = 0;
+        for (int i = 0; i < BUTTON_STYLE_VALUES.length; i++) {
+            if (BUTTON_STYLE_VALUES[i].equals(style)) {
+                index = i;
+                break;
+            }
+        }
+        spinner.setSelection(index);
+    }
+
     /**
      * 设置 Spinner 的选中项
      */
@@ -351,31 +503,6 @@ public class CustomCameraConfigFragment extends Fragment {
     }
 
     /**
-     * 设置旋转角度 Spinner 的选中项
-     */
-    private void setRotationSpinnerSelection(Spinner spinner, int rotation) {
-        int index = 0;
-        for (int i = 0; i < ROTATION_VALUES.length; i++) {
-            if (ROTATION_VALUES[i] == rotation) {
-                index = i;
-                break;
-            }
-        }
-        spinner.setSelection(index);
-    }
-
-    /**
-     * 获取旋转角度 Spinner 的值
-     */
-    private int getRotationSpinnerValue(Spinner spinner) {
-        int position = spinner.getSelectedItemPosition();
-        if (position >= 0 && position < ROTATION_VALUES.length) {
-            return ROTATION_VALUES[position];
-        }
-        return 0;  // 默认不旋转
-    }
-
-    /**
      * 保存配置
      */
     private void saveConfig() {
@@ -383,31 +510,20 @@ public class CustomCameraConfigFragment extends Fragment {
             return;
         }
         
-        // 保存摄像头数量和屏幕方向
+        // 保存摄像头数量
         int countIndex = cameraCountSpinner.getSelectedItemPosition();
         int count;
-        String orientation;
         
         if (countIndex == 0) {
-            // 4-横屏
-            count = 4;
-            orientation = "landscape";
+            count = 4;  // 4个摄像头
         } else if (countIndex == 1) {
-            // 4-竖屏
-            count = 4;
-            orientation = "portrait";
-        } else if (countIndex == 2) {
-            // 2个
-            count = 2;
-            orientation = "landscape";  // 默认横屏
+            count = 2;  // 2个摄像头
         } else {
-            // 1个
-            count = 1;
-            orientation = "landscape";  // 默认横屏
+            count = 1;  // 1个摄像头
         }
         
         appConfig.setCameraCount(count);
-        appConfig.setScreenOrientation(orientation);
+        appConfig.setScreenOrientation("landscape");  // 统一使用横屏模式
         
         // 保存摄像头ID
         appConfig.setCameraId("front", getSpinnerValue(spinnerFrontId));
@@ -419,16 +535,6 @@ public class CustomCameraConfigFragment extends Fragment {
             appConfig.setCameraId("right", getSpinnerValue(spinnerRightId));
         }
 
-        // 保存摄像头旋转角度
-        appConfig.setCameraRotation("front", getRotationSpinnerValue(spinnerFrontRotation));
-        if (count >= 2) {
-            appConfig.setCameraRotation("back", getRotationSpinnerValue(spinnerBackRotation));
-        }
-        if (count >= 4) {
-            appConfig.setCameraRotation("left", getRotationSpinnerValue(spinnerLeftRotation));
-            appConfig.setCameraRotation("right", getRotationSpinnerValue(spinnerRightRotation));
-        }
-
         // 保存摄像头名称
         appConfig.setCameraName("front", editFrontName.getText().toString().trim());
         if (count >= 2) {
@@ -438,14 +544,26 @@ public class CustomCameraConfigFragment extends Fragment {
             appConfig.setCameraName("left", editLeftName.getText().toString().trim());
             appConfig.setCameraName("right", editRightName.getText().toString().trim());
         }
+
+        // 保存自由操控配置
+        appConfig.setCustomFreeControlEnabled(switchFreeControl.isChecked());
         
-        Toast.makeText(getContext(), "配置已保存，重启应用后生效", Toast.LENGTH_LONG).show();
-        AppLog.d(TAG, "配置已保存: 摄像头数量=" + count);
+        // 保存按钮样式
+        String buttonStyleValue = getButtonStyleSpinnerValue();
+        appConfig.setCustomButtonStyle(buttonStyleValue);
         
-        // 返回上一页
-        if (getActivity() != null) {
-            getActivity().getSupportFragmentManager().popBackStack();
+        AppLog.d(TAG, "配置已自动保存: 摄像头数量=" + count + ", 自由操控=" + switchFreeControl.isChecked() + ", 按钮样式=" + buttonStyleValue);
+    }
+    
+    /**
+     * 获取按钮样式 Spinner 的值
+     */
+    private String getButtonStyleSpinnerValue() {
+        int position = spinnerButtonStyle.getSelectedItemPosition();
+        if (position >= 0 && position < BUTTON_STYLE_VALUES.length) {
+            return BUTTON_STYLE_VALUES[position];
         }
+        return AppConfig.BUTTON_STYLE_STANDARD;
     }
     
     /**
@@ -454,5 +572,79 @@ public class CustomCameraConfigFragment extends Fragment {
     private String getSpinnerValue(Spinner spinner) {
         Object selectedItem = spinner.getSelectedItem();
         return selectedItem != null ? selectedItem.toString() : "0";
+    }
+    
+    /**
+     * 重置所有自定义配置
+     */
+    private void resetAllCustomConfig() {
+        if (appConfig == null) return;
+        
+        // 禁用自动保存，防止重置过程中触发保存
+        configInitialized = false;
+        
+        // 重置摄像头映射
+        appConfig.setCameraCount(4);
+        appConfig.setCameraId("front", "0");
+        appConfig.setCameraId("back", "1");
+        appConfig.setCameraId("left", "2");
+        appConfig.setCameraId("right", "3");
+        appConfig.setCameraName("front", "前");
+        appConfig.setCameraName("back", "后");
+        appConfig.setCameraName("left", "左");
+        appConfig.setCameraName("right", "右");
+        
+        // 重置摄像头旋转和镜像
+        appConfig.setCameraRotation("front", 0);
+        appConfig.setCameraRotation("back", 0);
+        appConfig.setCameraRotation("left", 0);
+        appConfig.setCameraRotation("right", 0);
+        appConfig.setCameraMirror("front", false);
+        appConfig.setCameraMirror("back", false);
+        appConfig.setCameraMirror("left", false);
+        appConfig.setCameraMirror("right", false);
+        
+        // 重置裁剪配置
+        appConfig.resetCameraCrop("front");
+        appConfig.resetCameraCrop("back");
+        appConfig.resetCameraCrop("left");
+        appConfig.resetCameraCrop("right");
+        
+        // 重置布局数据
+        appConfig.clearCustomLayoutData();
+        
+        // 重置自由操控开关
+        appConfig.setCustomFreeControlEnabled(false);
+        
+        // 重置按钮样式和方向
+        appConfig.setCustomButtonStyle(AppConfig.BUTTON_STYLE_STANDARD);
+        appConfig.setCustomButtonOrientation(AppConfig.BUTTON_ORIENTATION_HORIZONTAL);
+        
+        AppLog.d(TAG, "所有自定义配置已重置");
+        
+        // 重新加载配置到界面
+        loadSavedConfig();
+        
+        // 重新启用自动保存
+        if (getView() != null) {
+            getView().postDelayed(() -> {
+                configInitialized = true;
+            }, 300);
+        }
+        
+        // 提示用户
+        if (getContext() != null) {
+            android.widget.Toast.makeText(getContext(), "配置已重置，请重启应用生效", android.widget.Toast.LENGTH_LONG).show();
+        }
+    }
+    
+    /**
+     * 重载界面（重新创建 Activity）
+     */
+    private void restartApp() {
+        if (getActivity() == null) return;
+        
+        android.widget.Toast.makeText(getContext(), "正在重载界面...", android.widget.Toast.LENGTH_SHORT).show();
+        getActivity().recreate();
     }
 }

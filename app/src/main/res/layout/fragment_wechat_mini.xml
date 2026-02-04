@@ -12,7 +12,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="8dp"
+        android:paddingTop="15dp"
+        android:paddingBottom="8dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
         android:gravity="center_vertical"
         android:background="@color/menu_background">
 
@@ -446,6 +449,18 @@
                     android:layout_marginTop="4dp"
                     android:visibility="gone" />
             </LinearLayout>
+
+            <!-- 开发者署名 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="小程序功能由小红书@邪恶银渐层 开发\n感谢车友们贡献的代码"
+                android:textColor="@color/text_hint"
+                android:textSize="12sp"
+                android:gravity="center"
+                android:lineSpacingExtra="4dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="16dp" />
 
         </LinearLayout>
     </ScrollView>
