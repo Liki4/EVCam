@@ -103,6 +103,7 @@ public class SettingsFragment extends Fragment {
     private boolean isInitializingStorageCleanup = false;
     
     // 录制摄像头选择配置相关
+    private android.widget.CheckBox cbRecordCameraFull;
     private android.widget.CheckBox cbRecordCameraFront;
     private android.widget.CheckBox cbRecordCameraBack;
     private android.widget.CheckBox cbRecordCameraLeft;
@@ -1085,12 +1086,15 @@ public class SettingsFragment extends Fragment {
      * 初始化录制摄像头选择配置
      */
     private void initRecordingCameraSelectionConfig(View view) {
+        boolean isLinkCo = AppConfig.CAR_MODEL_LYNKCO_07.equals(appConfig.getCarModel());
+
+        cbRecordCameraFull = view.findViewById(R.id.cb_record_camera_full);
         cbRecordCameraFront = view.findViewById(R.id.cb_record_camera_front);
         cbRecordCameraBack = view.findViewById(R.id.cb_record_camera_back);
         cbRecordCameraLeft = view.findViewById(R.id.cb_record_camera_left);
         cbRecordCameraRight = view.findViewById(R.id.cb_record_camera_right);
-        
-        if (cbRecordCameraFront == null || getContext() == null || appConfig == null) {
+
+        if ((!isLinkCo && cbRecordCameraFront == null) || (isLinkCo && cbRecordCameraFull == null) || getContext() == null || appConfig == null) {
             return;
         }
         
@@ -1098,8 +1102,14 @@ public class SettingsFragment extends Fragment {
         
         // 根据摄像头数量显示/隐藏对应的 CheckBox
         int cameraCount = appConfig.getCameraCount();
+
+        // 前摄像头（领克）
+        cbRecordCameraFront.setVisibility((cameraCount == 1) && (isLinkCo) ? View.VISIBLE : View.GONE);
+        cbRecordCameraFront.setText(appConfig.getRecordingCameraDisplayName("full", 1));
+        cbRecordCameraFront.setChecked(appConfig.isRecordingCameraEnabled("full"));
         
         // 前摄像头（1摄及以上都有）
+        cbRecordCameraFront.setVisibility((cameraCount >= 1) && (!isLinkCo) ? View.VISIBLE : View.GONE);
         cbRecordCameraFront.setVisibility(cameraCount >= 1 ? View.VISIBLE : View.GONE);
         cbRecordCameraFront.setText(appConfig.getRecordingCameraDisplayName("front", 1));
         cbRecordCameraFront.setChecked(appConfig.isRecordingCameraEnabled("front"));

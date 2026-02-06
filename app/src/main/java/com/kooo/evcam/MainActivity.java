@@ -1,7 +1,6 @@
 package com.kooo.evcam;
 
 
-import com.kooo.evcam.AppLog;
 import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
@@ -10,14 +9,12 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.SubMenu;
 import android.view.TextureView;
 import android.view.View;
 import android.widget.Button;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -35,15 +32,12 @@ import com.google.android.material.navigation.NavigationView;
 import com.kooo.evcam.camera.ImageAdjustManager;
 import com.kooo.evcam.camera.MultiCameraManager;
 import com.kooo.evcam.camera.SingleCamera;
-import com.kooo.evcam.FileTransferManager;
-import com.kooo.evcam.StorageHelper;
 import com.kooo.evcam.dingtalk.DingTalkApiClient;
 import com.kooo.evcam.dingtalk.DingTalkConfig;
 import com.kooo.evcam.dingtalk.DingTalkStreamManager;
 import com.kooo.evcam.telegram.TelegramApiClient;
 import com.kooo.evcam.telegram.TelegramBotManager;
 import com.kooo.evcam.telegram.TelegramConfig;
-import com.kooo.evcam.wechat.WechatCloudManager;
 import com.kooo.evcam.wechat.WechatMiniConfig;
 import com.kooo.evcam.wechat.WechatRemoteManager;
 import com.kooo.evcam.remote.RemoteCommandDispatcher;
@@ -51,12 +45,8 @@ import com.kooo.evcam.remote.handler.RemoteCommandHandler;
 import com.kooo.evcam.playback.PlaybackFragmentNew;
 import com.kooo.evcam.playback.PhotoPlaybackFragmentNew;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -85,7 +75,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     }
 
     private AutoFitTextureView textureFront, textureBack, textureLeft, textureRight;
-    private AutoFitTextureView textureMain;  // 领克07专用：中间主画面
+    private AutoFitTextureView textureFull;  // 领克07专用：中间主画面
     private Button btnStartRecord, btnExit, btnTakePhoto;
     private MultiCameraManager cameraManager;
 
@@ -1145,8 +1135,8 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         // 领克07特殊处理：需要为所有5个TextureView设置监听器
         if (isLynkCo07Layout) {
             // 领克07：5个TextureView都需要监听器
-            if (textureMain != null) {
-                textureMain.setSurfaceTextureListener(surfaceTextureListener);
+            if (textureFull != null) {
+                textureFull.setSurfaceTextureListener(surfaceTextureListener);
             }
             if (textureFront != null) {
                 textureFront.setSurfaceTextureListener(surfaceTextureListener);
@@ -2794,8 +2784,8 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
      */
     private void initLynkCo07Views() {
         // 获取主画面TextureView
-        textureMain = findViewById(R.id.texture_main);
-        labelMain = findViewById(R.id.label_main);
+        textureFull = findViewById(R.id.texture_full);
+        labelMain = findViewById(R.id.label_full);
 
         // 获取四个角落的容器（用于点击事件）
         previewTopLeftContainer = findViewById(R.id.preview_top_left_container);
@@ -2880,13 +2870,13 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         }
 
         // 更新主画面：使用变换矩阵裁切
-        if (textureMain != null) {
+        if (textureFull != null) {
             if (targetCropRegion != null) {
                 // 应用裁切变换到主画面
-                applySimpleCrop(textureMain, targetCropRegion, targetType);
+                applySimpleCrop(textureFull, targetCropRegion, targetType);
             } else {
                 // 显示完整画面（清除变换）
-                textureMain.setTransform(new android.graphics.Matrix());
+                textureFull.setTransform(new android.graphics.Matrix());
                 AppLog.d(TAG, "主画面：显示完整");
             }
         }
@@ -2897,7 +2887,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             // 将完整画面移到被点击的位置
             View previousContainer = getContainerForType(currentMainViewType);
             if (previousContainer != null && cameraManager != null) {
-                SingleCamera camera = cameraManager.getCamera("front");
+                SingleCamera camera = cameraManager.getCamera("full");
                 if (camera != null) {
                     // 在被点击的位置显示完整画面
                     AutoFitTextureView previousTextureView = getTextureViewForType(currentMainViewType);
@@ -2942,6 +2932,7 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             case "back": return textureBack;
             case "left": return textureLeft;
             case "right": return textureRight;
+            case "full": return textureFull;
             default: return null;
         }
     }
@@ -3083,37 +3074,37 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         boolean fisheyeEnabled = false;
         int fisheyeRatio = 0;
 
-        String frontId = appConfig.getCameraId("front");
+        String fullId = appConfig.getCameraId("full");
 
         // 验证摄像头ID有效性
         boolean validId = false;
         for (String id : cameraIds) {
-            if (id.equals(frontId)) {
+            if (id.equals(fullId)) {
                 validId = true;
                 break;
             }
         }
 
         if (!validId && cameraIds.length > 0) {
-            frontId = cameraIds[0];
-            AppLog.w(TAG, "领克07配置的摄像头ID无效，使用默认摄像头: " + frontId);
+            fullId = cameraIds[0];
+            AppLog.w(TAG, "领克07配置的摄像头ID无效，使用默认摄像头: " + fullId);
         }
 
-        if (frontId == null) {
+        if (fullId == null) {
             Toast.makeText(this, "没有可用的摄像头", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        AppLog.d(TAG, "领克07 5镜头模式初始化：摄像头ID=" + frontId +
+        AppLog.d(TAG, "领克07 5镜头模式初始化：摄像头ID=" + fullId +
                 ", 鱼眼矫正=" + (fisheyeEnabled ? "启用(" + fisheyeRatio + "%)" : "禁用"));
 
-        if (isLynkCo07Layout && textureMain != null) {
+        if (isLynkCo07Layout && textureFull != null) {
             // 5镜头交互模式：使用全景摄像头初始化
             // textureMain 显示完整画面
             // textureFront/Back/Left/Right 显示四个方向的裁切画面
             cameraManager.initLynkCo07PanoramicCamera(
-                    frontId,
-                    textureMain,           // 主画面（完整）
+                    fullId,
+                    textureFull,           // 主画面（完整）
                     textureFront,          // 左上（前）
                     textureBack,           // 右上（后）
                     textureLeft,           // 左下（左）
@@ -3128,12 +3119,12 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         } else if (textureFront != null) {
             // 回退：普通单摄像头模式
             cameraManager.initCameras(
-                    frontId, textureFront,
+                    fullId, textureFront,
                     null, null,
                     null, null,
                     null, null
             );
-            AppLog.d(TAG, "领克07回退到普通模式：摄像头ID=" + frontId);
+            AppLog.d(TAG, "领克07回退到普通模式：摄像头ID=" + fullId);
         } else {
             Toast.makeText(this, "没有可用的摄像头", Toast.LENGTH_SHORT).show();
         }

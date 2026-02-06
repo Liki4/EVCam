@@ -426,6 +426,15 @@
                     android:gravity="center_vertical">
 
                     <CheckBox
+                        android:id="@+id/cb_record_camera_full"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="全景"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:checked="true" />
+
+                    <CheckBox
                         android:id="@+id/cb_record_camera_front"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"

@@ -618,13 +618,13 @@ public class MultiCameraManager {
      * 初始化领克07/08 5镜头交互模式
      * 使用单个摄像头，同时显示完整画面和4个方向的裁切画面
      * @param cameraId 摄像头ID
-     * @param mainView 主画面View（显示完整或选中的裁切）
+     * @param fullView 主画面View（显示完整或选中的裁切）
      * @param frontView 前方View（左上裁切）
      * @param backView 后方View（右上裁切）
      * @param leftView 左侧View（左下裁切）
      * @param rightView 右侧View（右下裁切）
      */
-    public void initLynkCo07PanoramicCamera(String cameraId, TextureView mainView,
+    public void initLynkCo07PanoramicCamera(String cameraId, TextureView fullView,
             TextureView frontView, TextureView backView, 
             TextureView leftView, TextureView rightView) {
         AppLog.d(TAG, "Initializing LynkCo07 panoramic camera: cameraId=" + cameraId);
@@ -632,11 +632,11 @@ public class MultiCameraManager {
         // 清空之前的摄像头实例
         cameras.clear();
         
-        if (cameraId != null && mainView != null) {
+        if (cameraId != null && fullView != null) {
             // 创建单个摄像头实例，使用主画面作为预览Surface
-            SingleCamera panoramicCamera = new SingleCamera(context, cameraId, mainView);
-            panoramicCamera.setCameraPosition("front");
-            panoramicCamera.setPrimaryInstance(true);
+            SingleCamera fullCamera = new SingleCamera(context, cameraId, fullView);
+            fullCamera.setCameraPosition("full");
+            fullCamera.setPrimaryInstance(true);
             
             // 读取配置
             AppConfig appConfig = new AppConfig(context);
@@ -644,7 +644,7 @@ public class MultiCameraManager {
             // 配置鱼眼矫正
             boolean fisheyeEnabled = appConfig.isFisheyeCorrectionEnabled();
             int fisheyeStrength = appConfig.getFisheyeCorrectionRatio();
-            panoramicCamera.setFisheyeCorrection(fisheyeEnabled, fisheyeStrength);
+            fullCamera.setFisheyeCorrection(fisheyeEnabled, fisheyeStrength);
             
             // 配置方向映射
             String[] directions = new String[]{"front", "back", "left", "right"};
@@ -654,7 +654,7 @@ public class MultiCameraManager {
                 appConfig.getPanoramicRotation("left"),
                 appConfig.getPanoramicRotation("right")
             };
-            panoramicCamera.setPanoramicConfig(directions, rotations);
+            fullCamera.setPanoramicConfig(directions, rotations);
             
             // 设置四个角落的裁切视图
             if (frontView != null || backView != null || leftView != null || rightView != null) {
@@ -665,13 +665,13 @@ public class MultiCameraManager {
                     AppConfig.getPanoramicCropRegion("left"),
                     AppConfig.getPanoramicCropRegion("right")
                 };
-                panoramicCamera.setAdditionalPanoramicViews(additionalViews, additionalRegions);
+                fullCamera.setAdditionalPanoramicViews(additionalViews, additionalRegions);
             }
             
             // 启用优化的全景模式（主画面不裁切）
-            panoramicCamera.setPanoramicModeOptimized(true);
+            fullCamera.setPanoramicModeOptimized(true);
             
-            cameras.put("front", panoramicCamera);
+            cameras.put("full", fullCamera);
             
             AppLog.d(TAG, "LynkCo07 panoramic camera initialized: ID=" + cameraId);
             AppLog.d(TAG, "  Fisheye correction: " + (fisheyeEnabled ? "enabled, strength=" + fisheyeStrength : "disabled"));
@@ -692,7 +692,7 @@ public class MultiCameraManager {
      * 设置领克07摄像头回调
      */
     private void setupLynkCo07CameraCallback() {
-        SingleCamera camera = cameras.get("front");
+        SingleCamera camera = cameras.get("full");
         if (camera == null) return;
         
         camera.setCallback(new CameraCallback() {
@@ -712,11 +712,11 @@ public class MultiCameraManager {
                 }
                 
                 // 获取预览尺寸
-                SingleCamera cam = cameras.get("front");
+                SingleCamera cam = cameras.get("full");
                 if (cam != null) {
                     Size previewSize = cam.getPreviewSize();
                     if (previewSize != null && previewSizeCallback != null) {
-                        previewSizeCallback.onPreviewSizeChosen("front", cameraId, previewSize);
+                        previewSizeCallback.onPreviewSizeChosen("full", cameraId, previewSize);
                     }
                     
                     // 启动全景帧更新（用于四角裁切视图）
@@ -726,7 +726,7 @@ public class MultiCameraManager {
                 // 处理会话配置完成
                 synchronized (sessionLock) {
                     if (expectedSessionCount > 0) {
-                        cameraSessionReady.put("front", true);
+                        cameraSessionReady.put("full", true);
                         sessionConfiguredCount++;
                         AppLog.d(TAG, "LynkCo07 session configured: " + sessionConfiguredCount + "/" + expectedSessionCount);
                         

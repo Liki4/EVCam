@@ -55,6 +55,7 @@ public class AppConfig {
     private static final String KEY_TIMESTAMP_WATERMARK_ENABLED = "timestamp_watermark_enabled";  // 时间角标开关
     
     // 录制摄像头选择配置
+    private static final String KEY_RECORDING_CAMERA_FULL_ENABLED = "recording_camera_full_enabled";  // 全景摄像头参与录制
     private static final String KEY_RECORDING_CAMERA_FRONT_ENABLED = "recording_camera_front_enabled";  // 前摄像头参与录制
     private static final String KEY_RECORDING_CAMERA_BACK_ENABLED = "recording_camera_back_enabled";    // 后摄像头参与录制
     private static final String KEY_RECORDING_CAMERA_LEFT_ENABLED = "recording_camera_left_enabled";    // 左摄像头参与录制
@@ -156,18 +157,22 @@ public class AppConfig {
     private static final String KEY_CAR_MODEL = "car_model";  // 车型（galaxy_e5 / custom）
     private static final String KEY_CAMERA_COUNT = "camera_count";  // 摄像头数量（4/2/1）
     private static final String KEY_SCREEN_ORIENTATION = "screen_orientation";  // 屏幕方向（landscape/portrait，仅4摄像头时有效）
+    private static final String KEY_CAMERA_FULL_ID = "camera_full_id";  // 全景摄像头编号
     private static final String KEY_CAMERA_FRONT_ID = "camera_front_id";  // 前摄像头编号
     private static final String KEY_CAMERA_BACK_ID = "camera_back_id";  // 后摄像头编号
     private static final String KEY_CAMERA_LEFT_ID = "camera_left_id";  // 左摄像头编号
     private static final String KEY_CAMERA_RIGHT_ID = "camera_right_id";  // 右摄像头编号
+    private static final String KEY_CAMERA_FULL_NAME = "camera_full_name";  // 全景摄像头名称
     private static final String KEY_CAMERA_FRONT_NAME = "camera_front_name";  // 前摄像头名称
     private static final String KEY_CAMERA_BACK_NAME = "camera_back_name";  // 后摄像头名称
     private static final String KEY_CAMERA_LEFT_NAME = "camera_left_name";  // 左摄像头名称
     private static final String KEY_CAMERA_RIGHT_NAME = "camera_right_name";  // 右摄像头名称
+    private static final String KEY_CAMERA_FULL_ROTATION = "camera_full_rotation";  // 全景摄像头旋转角度
     private static final String KEY_CAMERA_FRONT_ROTATION = "camera_front_rotation";  // 前摄像头旋转角度
     private static final String KEY_CAMERA_BACK_ROTATION = "camera_back_rotation";  // 后摄像头旋转角度
     private static final String KEY_CAMERA_LEFT_ROTATION = "camera_left_rotation";  // 左摄像头旋转角度
     private static final String KEY_CAMERA_RIGHT_ROTATION = "camera_right_rotation";  // 右摄像头旋转角度
+    private static final String KEY_CAMERA_FULL_MIRROR = "camera_full_mirror";  // 全景摄像头镜像
     private static final String KEY_CAMERA_FRONT_MIRROR = "camera_front_mirror";  // 前摄像头镜像
     private static final String KEY_CAMERA_BACK_MIRROR = "camera_back_mirror";  // 后摄像头镜像
     private static final String KEY_CAMERA_LEFT_MIRROR = "camera_left_mirror";  // 左摄像头镜像
@@ -797,7 +802,7 @@ public class AppConfig {
         // 领克07：只有一个摄像头，编号为0
         if (CAR_MODEL_LYNKCO_07.equals(carModel)) {
             switch (position) {
-                case "front":
+                case "full":
                     key = KEY_CAMERA_FRONT_ID;
                     defaultValue = "0";  // 领克07：唯一摄像头编号0
                     break;
@@ -892,6 +897,9 @@ public class AppConfig {
         String key;
         String defaultValue = getDefaultCameraName(position);
         switch (position) {
+            case "full":
+                key = KEY_CAMERA_FULL_NAME;
+                break;
             case "front":
                 key = KEY_CAMERA_FRONT_NAME;
                 break;
@@ -1433,6 +1441,9 @@ public class AppConfig {
     public void setRecordingCameraEnabled(String position, boolean enabled) {
         String key;
         switch (position) {
+            case "full":
+                key = KEY_RECORDING_CAMERA_FULL_ENABLED;
+                break;
             case "front":
                 key = KEY_RECORDING_CAMERA_FRONT_ENABLED;
                 break;
@@ -1461,6 +1472,9 @@ public class AppConfig {
     public boolean isRecordingCameraEnabled(String position) {
         String key;
         switch (position) {
+            case "full":
+                key = KEY_RECORDING_CAMERA_FULL_ENABLED;
+                break;
             case "front":
                 key = KEY_RECORDING_CAMERA_FRONT_ENABLED;
                 break;
@@ -1488,9 +1502,18 @@ public class AppConfig {
     public java.util.Set<String> getEnabledRecordingCameras() {
         java.util.Set<String> enabled = new java.util.HashSet<>();
         int cameraCount = getCameraCount();
-        
+        boolean isLinkCo = AppConfig.CAR_MODEL_LYNKCO_07.equals(getCarModel());
+
+        if (cameraCount == 1 && isLinkCo && isRecordingCameraEnabled("full")){
+            enabled.add("full");
+            enabled.add("front");
+            enabled.add("back");
+            enabled.add("left");
+            enabled.add("right");
+        }
+
         // 根据摄像头数量判断哪些位置存在
-        if (cameraCount >= 1 && isRecordingCameraEnabled("front")) {
+        if (cameraCount >= 1 && !isLinkCo && isRecordingCameraEnabled("front")) {
             enabled.add("front");
         }
         if (cameraCount >= 2 && isRecordingCameraEnabled("back")) {
@@ -1526,6 +1549,7 @@ public class AppConfig {
      */
     public void resetRecordingCameraSelection() {
         prefs.edit()
+            .putBoolean(KEY_RECORDING_CAMERA_FULL_ENABLED, true)
             .putBoolean(KEY_RECORDING_CAMERA_FRONT_ENABLED, true)
             .putBoolean(KEY_RECORDING_CAMERA_BACK_ENABLED, true)
             .putBoolean(KEY_RECORDING_CAMERA_LEFT_ENABLED, true)
