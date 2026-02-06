@@ -67,6 +67,11 @@ public class MultiVideoPlayerManager {
 
     /** 视频时长（毫秒） */
     private int duration = 0;
+    
+    /** Seek同步相关 */
+    private int pendingSeekCount = 0;  // 待完成的seek操作数
+    private int completedSeekCount = 0;  // 已完成的seek操作数
+    private Runnable pendingSeekCallback = null;  // seek完成后的回调
 
     /** 播放状态监听器 */
     private OnPlaybackListener playbackListener;
@@ -193,7 +198,10 @@ public class MultiVideoPlayerManager {
                 @Override
                 public void onSurfaceTextureSizeChanged(android.graphics.SurfaceTexture surface, int width, int height) {
                     // 应用裁切变换（如果是领克07模式）
-                    applyCropTransformIfNeeded(position, textureView, mediaPlayer);
+                    // 延迟应用，确保MediaPlayer已准备好
+                    handler.postDelayed(() -> {
+                        applyCropTransformIfNeeded(position, textureView, mediaPlayer);
+                    }, 100);
                 }
 
                 @Override
@@ -224,7 +232,10 @@ public class MultiVideoPlayerManager {
                 setMediaPlayerSpeed(mp, currentSpeed);
                 
                 // 应用裁切变换（如果是领克07模式）
-                applyCropTransformIfNeeded(position, textureView, mp);
+                // 延迟应用，确保视频尺寸已获取
+                handler.postDelayed(() -> {
+                    applyCropTransformIfNeeded(position, textureView, mp);
+                }, 100);
 
                 preparedCount++;
                 checkAllPrepared();
@@ -251,8 +262,20 @@ public class MultiVideoPlayerManager {
     
     /**
      * 如果需要，应用裁切变换（领克07模式）
+     * 带重试机制，确保裁切变换正确应用
      */
     private void applyCropTransformIfNeeded(String position, TextureView textureView, MediaPlayer mediaPlayer) {
+        applyCropTransformIfNeeded(position, textureView, mediaPlayer, 0);
+    }
+    
+    /**
+     * 如果需要，应用裁切变换（领克07模式）
+     * @param position 摄像头位置
+     * @param textureView TextureView
+     * @param mediaPlayer MediaPlayer
+     * @param retryCount 重试次数（最多重试3次）
+     */
+    private void applyCropTransformIfNeeded(String position, TextureView textureView, MediaPlayer mediaPlayer, int retryCount) {
         AppConfig appConfig = new AppConfig(context);
         boolean isLynkco07 = AppConfig.CAR_MODEL_LYNKCO_07.equals(appConfig.getCarModel());
         
@@ -264,7 +287,13 @@ public class MultiVideoPlayerManager {
         int videoWidth = mediaPlayer.getVideoWidth();
         int videoHeight = mediaPlayer.getVideoHeight();
         
+        // 如果视频尺寸未获取到，延迟重试（最多3次）
         if (videoWidth <= 0 || videoHeight <= 0) {
+            if (retryCount < 3) {
+                handler.postDelayed(() -> {
+                    applyCropTransformIfNeeded(position, textureView, mediaPlayer, retryCount + 1);
+                }, 200);
+            }
             return;
         }
         
@@ -279,8 +308,13 @@ public class MultiVideoPlayerManager {
             int viewWidth = textureView.getWidth();
             int viewHeight = textureView.getHeight();
             
+            // 如果View尺寸未获取到，延迟重试（最多3次）
             if (viewWidth == 0 || viewHeight == 0) {
-                textureView.postDelayed(() -> applyCropTransformIfNeeded(position, textureView, mediaPlayer), 100);
+                if (retryCount < 3) {
+                    handler.postDelayed(() -> {
+                        applyCropTransformIfNeeded(position, textureView, mediaPlayer, retryCount + 1);
+                    }, 200);
+                }
                 return;
             }
             
@@ -430,7 +464,7 @@ public class MultiVideoPlayerManager {
     }
 
     /**
-     * 跳转到指定位置
+     * 跳转到指定位置（同步所有视频）
      */
     public void seekTo(int position) {
         if (!isPrepared) return;
@@ -442,21 +476,61 @@ public class MultiVideoPlayerManager {
                 singleMp.seekTo(position);
             }
         } else {
-            // 多路模式
-            MediaPlayer frontMp = textureMediaPlayers.get(VideoGroup.POSITION_FRONT);
-            MediaPlayer backMp = textureMediaPlayers.get(VideoGroup.POSITION_BACK);
-            MediaPlayer leftMp = textureMediaPlayers.get(VideoGroup.POSITION_LEFT);
-            MediaPlayer rightMp = textureMediaPlayers.get(VideoGroup.POSITION_RIGHT);
-            
-            if (frontMp != null) frontMp.seekTo(position);
-            if (backMp != null) backMp.seekTo(position);
-            if (leftMp != null) leftMp.seekTo(position);
-            if (rightMp != null) rightMp.seekTo(position);
+            // 多路模式：同步seek所有视频
+            seekToSync(position, null);
+        }
+    }
+    
+    /**
+     * 同步seek到指定位置（等待所有MediaPlayer完成seek）
+     * @param position 目标位置（毫秒）
+     * @param callback seek完成后的回调（可为null）
+     */
+    private void seekToSync(int position, Runnable callback) {
+        // 收集所有需要seek的MediaPlayer
+        java.util.List<MediaPlayer> playersToSeek = new java.util.ArrayList<>();
+        MediaPlayer frontMp = textureMediaPlayers.get(VideoGroup.POSITION_FRONT);
+        MediaPlayer backMp = textureMediaPlayers.get(VideoGroup.POSITION_BACK);
+        MediaPlayer leftMp = textureMediaPlayers.get(VideoGroup.POSITION_LEFT);
+        MediaPlayer rightMp = textureMediaPlayers.get(VideoGroup.POSITION_RIGHT);
+        
+        if (frontMp != null) playersToSeek.add(frontMp);
+        if (backMp != null) playersToSeek.add(backMp);
+        if (leftMp != null) playersToSeek.add(leftMp);
+        if (rightMp != null) playersToSeek.add(rightMp);
+        
+        if (playersToSeek.isEmpty()) {
+            if (callback != null) callback.run();
+            return;
+        }
+        
+        // 重置计数器
+        pendingSeekCount = playersToSeek.size();
+        completedSeekCount = 0;
+        pendingSeekCallback = callback;
+        
+        // 为每个MediaPlayer设置OnSeekCompleteListener
+        MediaPlayer.OnSeekCompleteListener seekListener = (mp) -> {
+            completedSeekCount++;
+            // 所有seek完成后执行回调
+            if (completedSeekCount >= pendingSeekCount) {
+                if (pendingSeekCallback != null) {
+                    handler.post(pendingSeekCallback);
+                    pendingSeekCallback = null;
+                }
+            }
+        };
+        
+        // 对所有MediaPlayer执行seek
+        for (MediaPlayer mp : playersToSeek) {
+            mp.setOnSeekCompleteListener(seekListener);
+            mp.seekTo(position);
         }
     }
 
     /**
      * 获取当前播放位置
+     * 多路模式下返回所有视频位置的最小值，确保所有视频都已播放到该位置
      */
     public int getCurrentPosition() {
         // 返回当前播放视频的位置
@@ -484,33 +558,53 @@ public class MultiVideoPlayerManager {
             }
         }
         
-        // 多路模式或后备：从四宫格获取
+        // 多路模式：返回所有视频位置的最小值（确保所有视频都已播放到该位置）
         MediaPlayer frontMp = textureMediaPlayers.get(VideoGroup.POSITION_FRONT);
         MediaPlayer backMp = textureMediaPlayers.get(VideoGroup.POSITION_BACK);
         MediaPlayer leftMp = textureMediaPlayers.get(VideoGroup.POSITION_LEFT);
         MediaPlayer rightMp = textureMediaPlayers.get(VideoGroup.POSITION_RIGHT);
         
+        int minPosition = Integer.MAX_VALUE;
+        boolean hasValidPosition = false;
+        
         if (frontMp != null) {
             try {
-                return frontMp.getCurrentPosition();
+                int pos = frontMp.getCurrentPosition();
+                if (pos > 0) {
+                    minPosition = Math.min(minPosition, pos);
+                    hasValidPosition = true;
+                }
             } catch (Exception e) { /* ignore */ }
         }
         if (backMp != null) {
             try {
-                return backMp.getCurrentPosition();
+                int pos = backMp.getCurrentPosition();
+                if (pos > 0) {
+                    minPosition = Math.min(minPosition, pos);
+                    hasValidPosition = true;
+                }
             } catch (Exception e) { /* ignore */ }
         }
         if (leftMp != null) {
             try {
-                return leftMp.getCurrentPosition();
+                int pos = leftMp.getCurrentPosition();
+                if (pos > 0) {
+                    minPosition = Math.min(minPosition, pos);
+                    hasValidPosition = true;
+                }
             } catch (Exception e) { /* ignore */ }
         }
         if (rightMp != null) {
             try {
-                return rightMp.getCurrentPosition();
+                int pos = rightMp.getCurrentPosition();
+                if (pos > 0) {
+                    minPosition = Math.min(minPosition, pos);
+                    hasValidPosition = true;
+                }
             } catch (Exception e) { /* ignore */ }
         }
-        return 0;
+        
+        return hasValidPosition ? minPosition : 0;
     }
 
     /**
@@ -636,14 +730,15 @@ public class MultiVideoPlayerManager {
                 if (singleMp != null) {
                     singleMp.pause();
                 }
-                // 直接 seek 到保存的位置
-                seekTo(savedPosition);
-                if (wasPlaying) {
-                    play();
-                } else {
-                    // 确保所有视频都暂停
-                    pause();
-                }
+                // 同步seek到保存的位置，完成后恢复播放状态
+                seekToSync(savedPosition, () -> {
+                    if (wasPlaying) {
+                        play();
+                    } else {
+                        // 确保所有视频都暂停
+                        pause();
+                    }
+                });
             }
         }
     }
@@ -690,8 +785,11 @@ public class MultiVideoPlayerManager {
                     @Override
                     public void onSurfaceTextureSizeChanged(android.graphics.SurfaceTexture surface, int width, int height) {
                         // 应用裁切变换（如果是领克07模式）
+                        // 延迟应用，确保MediaPlayer已准备好
                         if (isLynkco07 && hasFull) {
-                            applyCropTransformIfNeeded(singleModePosition, videoSingle, mediaPlayer);
+                            handler.postDelayed(() -> {
+                                applyCropTransformIfNeeded(singleModePosition, videoSingle, mediaPlayer);
+                            }, 100);
                         }
                     }
 
@@ -715,8 +813,11 @@ public class MultiVideoPlayerManager {
                     abandonAudioFocus();
                     
                     // 应用裁切变换（如果是领克07模式）
+                    // 延迟应用，确保视频尺寸已获取
                     if (isLynkco07 && hasFull) {
-                        applyCropTransformIfNeeded(singleModePosition, videoSingle, mp);
+                        handler.postDelayed(() -> {
+                            applyCropTransformIfNeeded(singleModePosition, videoSingle, mp);
+                        }, 100);
                     }
                     
                     // 视频准备好后再 seek 和播放
