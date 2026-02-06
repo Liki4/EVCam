@@ -11,7 +11,8 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.VideoView;
+import android.view.TextureView;
+import android.view.Surface;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -61,7 +62,7 @@ public class PlaybackFragmentNew extends Fragment {
 
     // 预览区组件
     private View multiViewLayout, singleViewLayout;
-    private VideoView videoFront, videoBack, videoLeft, videoRight, videoSingle;
+    private TextureView videoFront, videoBack, videoLeft, videoRight, videoSingle;
     private FrameLayout frameFront, frameBack, frameLeft, frameRight;
     private TextView labelFront, labelBack, labelLeft, labelRight, labelSingle;
     private TextView placeholderFront, placeholderBack, placeholderLeft, placeholderRight;
@@ -130,6 +131,9 @@ public class PlaybackFragmentNew extends Fragment {
         videoLeft = view.findViewById(R.id.video_left);
         videoRight = view.findViewById(R.id.video_right);
         videoSingle = view.findViewById(R.id.video_single);
+        
+        // 设置TextureView的SurfaceTexture监听器
+        setupTextureViewListeners();
 
         frameFront = view.findViewById(R.id.frame_front);
         frameBack = view.findViewById(R.id.frame_back);
@@ -177,6 +181,29 @@ public class PlaybackFragmentNew extends Fragment {
         multiViewLayout.setVisibility(View.GONE);
         singleViewLayout.setVisibility(View.GONE);
         noSelectionHint.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * 设置TextureView的SurfaceTexture监听器
+     */
+    private void setupTextureViewListeners() {
+        // TextureView的SurfaceTexture监听器由MultiVideoPlayerManager处理
+        // 这里只需要确保TextureView可用
+        if (videoFront != null) {
+            videoFront.setSurfaceTextureListener(null); // 由MediaPlayer管理
+        }
+        if (videoBack != null) {
+            videoBack.setSurfaceTextureListener(null);
+        }
+        if (videoLeft != null) {
+            videoLeft.setSurfaceTextureListener(null);
+        }
+        if (videoRight != null) {
+            videoRight.setSurfaceTextureListener(null);
+        }
+        if (videoSingle != null) {
+            videoSingle.setSurfaceTextureListener(null);
+        }
     }
 
     private void initPlayerManager() {

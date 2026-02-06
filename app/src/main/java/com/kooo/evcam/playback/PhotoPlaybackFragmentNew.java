@@ -28,6 +28,7 @@ import com.bumptech.glide.signature.ObjectKey;
 import android.widget.PopupMenu;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.kooo.evcam.AppConfig;
 import com.kooo.evcam.MainActivity;
 import com.kooo.evcam.R;
 import com.kooo.evcam.StorageHelper;
@@ -78,7 +79,7 @@ public class PhotoPlaybackFragmentNew extends Fragment {
     // 状态
     private boolean isMultiSelectMode = false;
     private boolean isSingleMode = false;
-    private String currentSinglePosition = PhotoGroup.POSITION_FRONT;
+    private String currentSinglePosition = PhotoGroup.POSITION_FULL;
 
     @Nullable
     @Override
@@ -273,8 +274,18 @@ public class PhotoPlaybackFragmentNew extends Fragment {
 
         // 加载大图
         if (currentGroup != null) {
-            File photoFile = currentGroup.getPhotoFile(position);
-            loadImage(photoFile, imageSingle);
+            AppConfig appConfig = new AppConfig(getContext());
+            boolean isLynkco07 = AppConfig.CAR_MODEL_LYNKCO_07.equals(appConfig.getCarModel());
+            boolean hasFull = currentGroup.hasPhoto(PhotoGroup.POSITION_FULL);
+            
+            // 领克07模式：如果有full照片且选择的是front/back/left/right，从full裁切显示
+            if (isLynkco07 && hasFull && !PhotoGroup.POSITION_FULL.equals(position)) {
+                File fullPhoto = currentGroup.getFullPhoto();
+                loadCroppedImage(fullPhoto, imageSingle, position);
+            } else {
+                File photoFile = currentGroup.getPhotoFile(position);
+                loadImage(photoFile, imageSingle);
+            }
         }
     }
 
@@ -362,8 +373,18 @@ public class PhotoPlaybackFragmentNew extends Fragment {
             multiViewLayout.setVisibility(View.GONE);
             singleViewLayout.setVisibility(View.VISIBLE);
             // 重新加载单路大图
-            File photoFile = group.getPhotoFile(currentSinglePosition);
-            loadImage(photoFile, imageSingle);
+            AppConfig appConfig = new AppConfig(getContext());
+            boolean isLynkco07 = AppConfig.CAR_MODEL_LYNKCO_07.equals(appConfig.getCarModel());
+            boolean hasFull = group.hasPhoto(PhotoGroup.POSITION_FULL);
+            
+            // 领克07模式：如果有full照片且选择的是front/back/left/right，从full裁切显示
+            if (isLynkco07 && hasFull && !PhotoGroup.POSITION_FULL.equals(currentSinglePosition)) {
+                File fullPhoto = group.getFullPhoto();
+                loadCroppedImage(fullPhoto, imageSingle, currentSinglePosition);
+            } else {
+                File photoFile = group.getPhotoFile(currentSinglePosition);
+                loadImage(photoFile, imageSingle);
+            }
         } else {
             multiViewLayout.setVisibility(View.VISIBLE);
             singleViewLayout.setVisibility(View.GONE);
@@ -383,30 +404,60 @@ public class PhotoPlaybackFragmentNew extends Fragment {
      * 更新图片显示
      */
     private void updatePhotoDisplay(PhotoGroup group) {
-        boolean hasFront = group.hasPhoto(PhotoGroup.POSITION_FRONT);
-        boolean hasBack = group.hasPhoto(PhotoGroup.POSITION_BACK);
-        boolean hasLeft = group.hasPhoto(PhotoGroup.POSITION_LEFT);
-        boolean hasRight = group.hasPhoto(PhotoGroup.POSITION_RIGHT);
+        AppConfig appConfig = new AppConfig(getContext());
+        boolean isLynkco07 = AppConfig.CAR_MODEL_LYNKCO_07.equals(appConfig.getCarModel());
+        boolean hasFull = group.hasPhoto(PhotoGroup.POSITION_FULL);
+        
+        // 领克07模式：如果有full照片，从full裁切显示；否则使用原有的front/back/left/right照片
+        if (isLynkco07 && hasFull) {
+            File fullPhoto = group.getFullPhoto();
+            
+            // 前置（从full左上角裁切）
+            imageFront.setVisibility(View.VISIBLE);
+            placeholderFront.setVisibility(View.GONE);
+            loadCroppedImage(fullPhoto, imageFront, PhotoGroup.POSITION_FRONT);
+            
+            // 后置（从full右上角裁切）
+            imageBack.setVisibility(View.VISIBLE);
+            placeholderBack.setVisibility(View.GONE);
+            loadCroppedImage(fullPhoto, imageBack, PhotoGroup.POSITION_BACK);
+            
+            // 左侧（从full左下角裁切）
+            imageLeft.setVisibility(View.VISIBLE);
+            placeholderLeft.setVisibility(View.GONE);
+            loadCroppedImage(fullPhoto, imageLeft, PhotoGroup.POSITION_LEFT);
+            
+            // 右侧（从full右下角裁切）
+            imageRight.setVisibility(View.VISIBLE);
+            placeholderRight.setVisibility(View.GONE);
+            loadCroppedImage(fullPhoto, imageRight, PhotoGroup.POSITION_RIGHT);
+        } else {
+            // 非领克07模式或没有full照片：使用原有逻辑
+            boolean hasFront = group.hasPhoto(PhotoGroup.POSITION_FRONT);
+            boolean hasBack = group.hasPhoto(PhotoGroup.POSITION_BACK);
+            boolean hasLeft = group.hasPhoto(PhotoGroup.POSITION_LEFT);
+            boolean hasRight = group.hasPhoto(PhotoGroup.POSITION_RIGHT);
 
-        // 前置
-        imageFront.setVisibility(hasFront ? View.VISIBLE : View.GONE);
-        placeholderFront.setVisibility(hasFront ? View.GONE : View.VISIBLE);
-        if (hasFront) loadImage(group.getFrontPhoto(), imageFront);
+            // 前置
+            imageFront.setVisibility(hasFront ? View.VISIBLE : View.GONE);
+            placeholderFront.setVisibility(hasFront ? View.GONE : View.VISIBLE);
+            if (hasFront) loadImage(group.getFrontPhoto(), imageFront);
 
-        // 后置
-        imageBack.setVisibility(hasBack ? View.VISIBLE : View.GONE);
-        placeholderBack.setVisibility(hasBack ? View.GONE : View.VISIBLE);
-        if (hasBack) loadImage(group.getBackPhoto(), imageBack);
+            // 后置
+            imageBack.setVisibility(hasBack ? View.VISIBLE : View.GONE);
+            placeholderBack.setVisibility(hasBack ? View.GONE : View.VISIBLE);
+            if (hasBack) loadImage(group.getBackPhoto(), imageBack);
 
-        // 左侧
-        imageLeft.setVisibility(hasLeft ? View.VISIBLE : View.GONE);
-        placeholderLeft.setVisibility(hasLeft ? View.GONE : View.VISIBLE);
-        if (hasLeft) loadImage(group.getLeftPhoto(), imageLeft);
+            // 左侧
+            imageLeft.setVisibility(hasLeft ? View.VISIBLE : View.GONE);
+            placeholderLeft.setVisibility(hasLeft ? View.GONE : View.VISIBLE);
+            if (hasLeft) loadImage(group.getLeftPhoto(), imageLeft);
 
-        // 右侧
-        imageRight.setVisibility(hasRight ? View.VISIBLE : View.GONE);
-        placeholderRight.setVisibility(hasRight ? View.GONE : View.VISIBLE);
-        if (hasRight) loadImage(group.getRightPhoto(), imageRight);
+            // 右侧
+            imageRight.setVisibility(hasRight ? View.VISIBLE : View.GONE);
+            placeholderRight.setVisibility(hasRight ? View.GONE : View.VISIBLE);
+            if (hasRight) loadImage(group.getRightPhoto(), imageRight);
+        }
     }
 
     /**
@@ -425,6 +476,35 @@ public class PhotoPlaybackFragmentNew extends Fragment {
 
         Glide.with(getContext())
                 .load(photoFile)
+                .apply(options)
+                .into(imageView);
+    }
+
+    /**
+     * 从full照片裁切并加载指定方向的图片
+     */
+    private void loadCroppedImage(File fullPhotoFile, ImageView imageView, String position) {
+        if (fullPhotoFile == null || !fullPhotoFile.exists() || getContext() == null) {
+            return;
+        }
+
+        // 获取裁切区域（归一化坐标）
+        float[] cropRegion = AppConfig.getPanoramicCropRegion(position);
+        if (cropRegion == null || cropRegion.length < 4) {
+            loadImage(fullPhotoFile, imageView);
+            return;
+        }
+
+        // 使用Glide的transform进行裁切
+        RequestOptions options = new RequestOptions()
+                .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
+                .signature(new ObjectKey(fullPhotoFile.lastModified()))
+                .placeholder(android.R.color.black)
+                .error(android.R.color.black)
+                .transform(new PanoramicCropTransformation(cropRegion));
+
+        Glide.with(getContext())
+                .load(fullPhotoFile)
                 .apply(options)
                 .into(imageView);
     }

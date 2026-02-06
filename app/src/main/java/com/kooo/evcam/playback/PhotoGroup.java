@@ -16,6 +16,7 @@ import java.util.Map;
 public class PhotoGroup {
 
     /** 摄像头位置常量 */
+    public static final String POSITION_FULL = "full";
     public static final String POSITION_FRONT = "front";
     public static final String POSITION_BACK = "back";
     public static final String POSITION_LEFT = "left";
@@ -123,6 +124,10 @@ public class PhotoGroup {
         return photoFiles.get(position);
     }
 
+    public File getFullPhoto() {
+        return photoFiles.get(POSITION_FULL);
+    }
+
     public File getFrontPhoto() {
         return photoFiles.get(POSITION_FRONT);
     }
@@ -144,7 +149,9 @@ public class PhotoGroup {
     }
 
     public File getThumbnailFile() {
-        if (photoFiles.containsKey(POSITION_FRONT)) {
+        if (photoFiles.containsKey(POSITION_FULL)) {
+            return photoFiles.get(POSITION_FULL);
+        } else if (photoFiles.containsKey(POSITION_FRONT)) {
             return photoFiles.get(POSITION_FRONT);
         } else if (photoFiles.containsKey(POSITION_BACK)) {
             return photoFiles.get(POSITION_BACK);

@@ -1,6 +1,7 @@
 package com.kooo.evcam.playback;
 
 import android.content.Context;
+import android.graphics.Matrix;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
@@ -10,7 +11,12 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-import android.widget.VideoView;
+import android.view.Surface;
+import android.view.TextureView;
+import android.view.TextureView;
+import android.view.Surface;
+
+import com.kooo.evcam.AppConfig;
 
 import java.io.File;
 import java.util.HashMap;
@@ -29,12 +35,15 @@ public class MultiVideoPlayerManager {
     private final Context context;
     private final Handler handler;
 
-    /** 各位置的VideoView */
-    private VideoView videoFront;
-    private VideoView videoBack;
-    private VideoView videoLeft;
-    private VideoView videoRight;
-    private VideoView videoSingle;  // 单路模式用
+    /** 各位置的TextureView */
+    private TextureView videoFront;
+    private TextureView videoBack;
+    private TextureView videoLeft;
+    private TextureView videoRight;
+    private TextureView videoSingle;  // 单路模式用
+    
+    /** 各位置的MediaPlayer */
+    private final Map<String, MediaPlayer> textureMediaPlayers = new HashMap<>();
 
     /** 各位置的MediaPlayer引用（用于倍速控制） */
     private final Map<String, MediaPlayer> mediaPlayers = new HashMap<>();
@@ -54,7 +63,7 @@ public class MultiVideoPlayerManager {
 
     /** 是否单路模式 */
     private boolean isSingleMode = false;
-    private String singleModePosition = VideoGroup.POSITION_FRONT;
+    private String singleModePosition = VideoGroup.POSITION_FULL;
 
     /** 视频时长（毫秒） */
     private int duration = 0;
@@ -78,9 +87,9 @@ public class MultiVideoPlayerManager {
     }
 
     /**
-     * 设置VideoView引用
+     * 设置TextureView引用
      */
-    public void setVideoViews(VideoView front, VideoView back, VideoView left, VideoView right, VideoView single) {
+    public void setVideoViews(TextureView front, TextureView back, TextureView left, TextureView right, TextureView single) {
         this.videoFront = front;
         this.videoBack = back;
         this.videoLeft = left;
@@ -113,24 +122,41 @@ public class MultiVideoPlayerManager {
             return;
         }
 
-        // 统计要加载的视频数量
-        if (group.hasVideo(VideoGroup.POSITION_FRONT)) totalVideos++;
-        if (group.hasVideo(VideoGroup.POSITION_BACK)) totalVideos++;
-        if (group.hasVideo(VideoGroup.POSITION_LEFT)) totalVideos++;
-        if (group.hasVideo(VideoGroup.POSITION_RIGHT)) totalVideos++;
+        // 检查是否是领克07模式且有full视频
+        AppConfig appConfig = new AppConfig(context);
+        boolean isLynkco07 = AppConfig.CAR_MODEL_LYNKCO_07.equals(appConfig.getCarModel());
+        boolean hasFull = group.hasVideo(VideoGroup.POSITION_FULL);
 
-        if (totalVideos == 0) {
-            if (playbackListener != null) {
-                playbackListener.onError("No video files in this group");
+        if (isLynkco07 && hasFull) {
+            // 领克07模式：从full视频裁切显示
+            File fullVideo = group.getFullVideo();
+            totalVideos = 4; // 四个方向都从full视频裁切
+            
+            loadCroppedVideo(VideoGroup.POSITION_FRONT, fullVideo, videoFront);
+            loadCroppedVideo(VideoGroup.POSITION_BACK, fullVideo, videoBack);
+            loadCroppedVideo(VideoGroup.POSITION_LEFT, fullVideo, videoLeft);
+            loadCroppedVideo(VideoGroup.POSITION_RIGHT, fullVideo, videoRight);
+        } else {
+            // 非领克07模式或没有full视频：使用原有逻辑
+            // 统计要加载的视频数量
+            if (group.hasVideo(VideoGroup.POSITION_FRONT)) totalVideos++;
+            if (group.hasVideo(VideoGroup.POSITION_BACK)) totalVideos++;
+            if (group.hasVideo(VideoGroup.POSITION_LEFT)) totalVideos++;
+            if (group.hasVideo(VideoGroup.POSITION_RIGHT)) totalVideos++;
+
+            if (totalVideos == 0) {
+                if (playbackListener != null) {
+                    playbackListener.onError("No video files in this group");
+                }
+                return;
             }
-            return;
-        }
 
-        // 加载各位置视频
-        loadVideoIfExists(VideoGroup.POSITION_FRONT, group.getFrontVideo(), videoFront);
-        loadVideoIfExists(VideoGroup.POSITION_BACK, group.getBackVideo(), videoBack);
-        loadVideoIfExists(VideoGroup.POSITION_LEFT, group.getLeftVideo(), videoLeft);
-        loadVideoIfExists(VideoGroup.POSITION_RIGHT, group.getRightVideo(), videoRight);
+            // 加载各位置视频
+            loadVideoIfExists(VideoGroup.POSITION_FRONT, group.getFrontVideo(), videoFront);
+            loadVideoIfExists(VideoGroup.POSITION_BACK, group.getBackVideo(), videoBack);
+            loadVideoIfExists(VideoGroup.POSITION_LEFT, group.getLeftVideo(), videoLeft);
+            loadVideoIfExists(VideoGroup.POSITION_RIGHT, group.getRightVideo(), videoRight);
+        }
         
         // 如果是单路模式，也加载单路视频
         if (isSingleMode && videoSingle != null) {
@@ -139,20 +165,51 @@ public class MultiVideoPlayerManager {
     }
 
     /**
-     * 加载单个视频到VideoView
+     * 加载单个视频到TextureView
      */
-    private void loadVideoIfExists(String position, File videoFile, VideoView videoView) {
-        if (videoFile == null || !videoFile.exists() || videoView == null) {
+    private void loadVideoIfExists(String position, File videoFile, TextureView textureView) {
+        if (videoFile == null || !videoFile.exists() || textureView == null) {
             return;
         }
 
         try {
+            // 创建MediaPlayer
+            MediaPlayer mediaPlayer = new MediaPlayer();
             Uri uri = Uri.fromFile(videoFile);
-            videoView.setVideoURI(uri);
+            mediaPlayer.setDataSource(context, uri);
+            
+            // 设置Surface
+            textureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+                @Override
+                public void onSurfaceTextureAvailable(android.graphics.SurfaceTexture surface, int width, int height) {
+                    try {
+                        mediaPlayer.setSurface(new Surface(surface));
+                        mediaPlayer.prepareAsync();
+                    } catch (Exception e) {
+                        Log.e(TAG, "Failed to set surface for " + position, e);
+                    }
+                }
 
-            videoView.setOnPreparedListener(mp -> {
+                @Override
+                public void onSurfaceTextureSizeChanged(android.graphics.SurfaceTexture surface, int width, int height) {
+                    // 应用裁切变换（如果是领克07模式）
+                    applyCropTransformIfNeeded(position, textureView, mediaPlayer);
+                }
+
+                @Override
+                public boolean onSurfaceTextureDestroyed(android.graphics.SurfaceTexture surface) {
+                    return false;
+                }
+
+                @Override
+                public void onSurfaceTextureUpdated(android.graphics.SurfaceTexture surface) {
+                }
+            });
+
+            mediaPlayer.setOnPreparedListener(mp -> {
                 Log.d(TAG, "Video prepared: " + position);
                 mediaPlayers.put(position, mp);
+                textureMediaPlayers.put(position, mp);
 
                 // 行车记录仪视频没有声音，设置静音
                 mp.setVolume(0f, 0f);
@@ -165,12 +222,15 @@ public class MultiVideoPlayerManager {
 
                 // 设置倍速
                 setMediaPlayerSpeed(mp, currentSpeed);
+                
+                // 应用裁切变换（如果是领克07模式）
+                applyCropTransformIfNeeded(position, textureView, mp);
 
                 preparedCount++;
                 checkAllPrepared();
             });
 
-            videoView.setOnCompletionListener(mp -> {
+            mediaPlayer.setOnCompletionListener(mp -> {
                 // 所有视频播放完成
                 isPlaying = false;
                 if (playbackListener != null) {
@@ -179,7 +239,7 @@ public class MultiVideoPlayerManager {
                 }
             });
 
-            videoView.setOnErrorListener((mp, what, extra) -> {
+            mediaPlayer.setOnErrorListener((mp, what, extra) -> {
                 Log.e(TAG, "Video error: " + position + ", what=" + what + ", extra=" + extra);
                 return true;
             });
@@ -187,6 +247,79 @@ public class MultiVideoPlayerManager {
         } catch (Exception e) {
             Log.e(TAG, "Failed to load video: " + position, e);
         }
+    }
+    
+    /**
+     * 如果需要，应用裁切变换（领克07模式）
+     */
+    private void applyCropTransformIfNeeded(String position, TextureView textureView, MediaPlayer mediaPlayer) {
+        AppConfig appConfig = new AppConfig(context);
+        boolean isLynkco07 = AppConfig.CAR_MODEL_LYNKCO_07.equals(appConfig.getCarModel());
+        
+        if (!isLynkco07 || currentGroup == null || !currentGroup.hasVideo(VideoGroup.POSITION_FULL)) {
+            return;
+        }
+        
+        // 获取视频尺寸
+        int videoWidth = mediaPlayer.getVideoWidth();
+        int videoHeight = mediaPlayer.getVideoHeight();
+        
+        if (videoWidth <= 0 || videoHeight <= 0) {
+            return;
+        }
+        
+        // 获取裁切区域
+        float[] cropRegion = AppConfig.getPanoramicCropRegion(position);
+        if (cropRegion == null || cropRegion.length < 4) {
+            return;
+        }
+        
+        // 应用变换（参考SingleCamera.applyPanoramicCropTransformToView）
+        textureView.post(() -> {
+            int viewWidth = textureView.getWidth();
+            int viewHeight = textureView.getHeight();
+            
+            if (viewWidth == 0 || viewHeight == 0) {
+                textureView.postDelayed(() -> applyCropTransformIfNeeded(position, textureView, mediaPlayer), 100);
+                return;
+            }
+            
+            // 计算裁切区域像素坐标
+            float cropX = cropRegion[0] * videoWidth;
+            float cropY = cropRegion[1] * videoHeight;
+            float cropW = cropRegion[2] * videoWidth;
+            float cropH = cropRegion[3] * videoHeight;
+            
+            // 计算缩放和平移
+            android.graphics.Matrix matrix = new android.graphics.Matrix();
+            float scaleX = viewWidth / cropW;
+            float scaleY = viewHeight / cropH;
+            float translateX = -cropX * scaleX;
+            float translateY = -cropY * scaleY;
+            
+            matrix.setScale(scaleX, scaleY);
+            matrix.postTranslate(translateX, translateY);
+            
+            textureView.setTransform(matrix);
+            
+            Log.d(TAG, position + " applied crop transform: view=" + viewWidth + "x" + viewHeight +
+                    ", video=" + videoWidth + "x" + videoHeight +
+                    ", cropRegion=[" + cropRegion[0] + "," + cropRegion[1] + "," + cropRegion[2] + "," + cropRegion[3] + "]");
+        });
+    }
+
+    /**
+     * 从full视频裁切并加载到TextureView
+     * 使用TextureView + MediaPlayer，通过Matrix变换实现裁切
+     */
+    private void loadCroppedVideo(String position, File fullVideoFile, TextureView textureView) {
+        if (fullVideoFile == null || !fullVideoFile.exists() || textureView == null) {
+            return;
+        }
+
+        // 使用和loadVideoIfExists相同的逻辑
+        // 裁切效果通过applyCropTransformIfNeeded方法实现
+        loadVideoIfExists(position, fullVideoFile, textureView);
     }
 
     /**
@@ -219,24 +352,22 @@ public class MultiVideoPlayerManager {
         isPlaying = true;
 
         if (isSingleMode) {
-            // 单路模式播放 videoSingle（用户看到的视频）
-            if (videoSingle != null) {
-                videoSingle.start();
+            // 单路模式播放
+            MediaPlayer singleMp = textureMediaPlayers.get("single");
+            if (singleMp != null) {
+                singleMp.start();
             }
         } else {
             // 多路模式播放所有
-            if (videoFront != null && currentGroup != null && currentGroup.hasVideo(VideoGroup.POSITION_FRONT)) {
-                videoFront.start();
-            }
-            if (videoBack != null && currentGroup != null && currentGroup.hasVideo(VideoGroup.POSITION_BACK)) {
-                videoBack.start();
-            }
-            if (videoLeft != null && currentGroup != null && currentGroup.hasVideo(VideoGroup.POSITION_LEFT)) {
-                videoLeft.start();
-            }
-            if (videoRight != null && currentGroup != null && currentGroup.hasVideo(VideoGroup.POSITION_RIGHT)) {
-                videoRight.start();
-            }
+            MediaPlayer frontMp = textureMediaPlayers.get(VideoGroup.POSITION_FRONT);
+            MediaPlayer backMp = textureMediaPlayers.get(VideoGroup.POSITION_BACK);
+            MediaPlayer leftMp = textureMediaPlayers.get(VideoGroup.POSITION_LEFT);
+            MediaPlayer rightMp = textureMediaPlayers.get(VideoGroup.POSITION_RIGHT);
+            
+            if (frontMp != null) frontMp.start();
+            if (backMp != null) backMp.start();
+            if (leftMp != null) leftMp.start();
+            if (rightMp != null) rightMp.start();
         }
 
         if (playbackListener != null) {
@@ -253,11 +384,11 @@ public class MultiVideoPlayerManager {
     public void pause() {
         isPlaying = false;
 
-        if (videoFront != null) videoFront.pause();
-        if (videoBack != null) videoBack.pause();
-        if (videoLeft != null) videoLeft.pause();
-        if (videoRight != null) videoRight.pause();
-        if (videoSingle != null) videoSingle.pause();
+        for (MediaPlayer mp : textureMediaPlayers.values()) {
+            if (mp != null && mp.isPlaying()) {
+                mp.pause();
+            }
+        }
 
         if (playbackListener != null) {
             playbackListener.onPlaybackStateChanged(false);
@@ -284,11 +415,13 @@ public class MultiVideoPlayerManager {
         handler.removeCallbacksAndMessages(null);
 
         try {
-            if (videoFront != null) videoFront.stopPlayback();
-            if (videoBack != null) videoBack.stopPlayback();
-            if (videoLeft != null) videoLeft.stopPlayback();
-            if (videoRight != null) videoRight.stopPlayback();
-            if (videoSingle != null) videoSingle.stopPlayback();
+            for (MediaPlayer mp : textureMediaPlayers.values()) {
+                if (mp != null) {
+                    mp.stop();
+                    mp.release();
+                }
+            }
+            textureMediaPlayers.clear();
         } catch (Exception e) {
             Log.e(TAG, "Error stopping playback", e);
         }
@@ -303,23 +436,22 @@ public class MultiVideoPlayerManager {
         if (!isPrepared) return;
 
         if (isSingleMode) {
-            // 单路模式：操作 videoSingle（用户看到的视频）
-            if (videoSingle != null) {
-                videoSingle.seekTo(position);
+            // 单路模式
+            MediaPlayer singleMp = textureMediaPlayers.get("single");
+            if (singleMp != null) {
+                singleMp.seekTo(position);
             }
         } else {
-            if (videoFront != null && currentGroup != null && currentGroup.hasVideo(VideoGroup.POSITION_FRONT)) {
-                videoFront.seekTo(position);
-            }
-            if (videoBack != null && currentGroup != null && currentGroup.hasVideo(VideoGroup.POSITION_BACK)) {
-                videoBack.seekTo(position);
-            }
-            if (videoLeft != null && currentGroup != null && currentGroup.hasVideo(VideoGroup.POSITION_LEFT)) {
-                videoLeft.seekTo(position);
-            }
-            if (videoRight != null && currentGroup != null && currentGroup.hasVideo(VideoGroup.POSITION_RIGHT)) {
-                videoRight.seekTo(position);
-            }
+            // 多路模式
+            MediaPlayer frontMp = textureMediaPlayers.get(VideoGroup.POSITION_FRONT);
+            MediaPlayer backMp = textureMediaPlayers.get(VideoGroup.POSITION_BACK);
+            MediaPlayer leftMp = textureMediaPlayers.get(VideoGroup.POSITION_LEFT);
+            MediaPlayer rightMp = textureMediaPlayers.get(VideoGroup.POSITION_RIGHT);
+            
+            if (frontMp != null) frontMp.seekTo(position);
+            if (backMp != null) backMp.seekTo(position);
+            if (leftMp != null) leftMp.seekTo(position);
+            if (rightMp != null) rightMp.seekTo(position);
         }
     }
 
@@ -328,21 +460,24 @@ public class MultiVideoPlayerManager {
      */
     public int getCurrentPosition() {
         // 返回当前播放视频的位置
-        if (isSingleMode && videoSingle != null) {
-            // 单路模式下优先从 videoSingle 获取位置
-            try {
-                int pos = videoSingle.getCurrentPosition();
-                if (pos > 0) {
-                    return pos;
-                }
-            } catch (Exception e) {
-                // videoSingle 可能未准备好，尝试从四宫格获取
-            }
-            // 后备：从四宫格中对应位置的视频获取
-            VideoView sourceVideo = getSingleModeVideoView();
-            if (sourceVideo != null) {
+        if (isSingleMode) {
+            // 单路模式下优先从 single MediaPlayer 获取位置
+            MediaPlayer singleMp = textureMediaPlayers.get("single");
+            if (singleMp != null) {
                 try {
-                    return sourceVideo.getCurrentPosition();
+                    int pos = singleMp.getCurrentPosition();
+                    if (pos > 0) {
+                        return pos;
+                    }
+                } catch (Exception e) {
+                    // ignore
+                }
+            }
+            // 后备：从四宫格中对应位置的MediaPlayer获取
+            MediaPlayer sourceMp = getSingleModeMediaPlayer();
+            if (sourceMp != null) {
+                try {
+                    return sourceMp.getCurrentPosition();
                 } catch (Exception e) {
                     // ignore
                 }
@@ -350,24 +485,29 @@ public class MultiVideoPlayerManager {
         }
         
         // 多路模式或后备：从四宫格获取
-        if (videoFront != null && currentGroup != null && currentGroup.hasVideo(VideoGroup.POSITION_FRONT)) {
+        MediaPlayer frontMp = textureMediaPlayers.get(VideoGroup.POSITION_FRONT);
+        MediaPlayer backMp = textureMediaPlayers.get(VideoGroup.POSITION_BACK);
+        MediaPlayer leftMp = textureMediaPlayers.get(VideoGroup.POSITION_LEFT);
+        MediaPlayer rightMp = textureMediaPlayers.get(VideoGroup.POSITION_RIGHT);
+        
+        if (frontMp != null) {
             try {
-                return videoFront.getCurrentPosition();
+                return frontMp.getCurrentPosition();
             } catch (Exception e) { /* ignore */ }
         }
-        if (videoBack != null && currentGroup != null && currentGroup.hasVideo(VideoGroup.POSITION_BACK)) {
+        if (backMp != null) {
             try {
-                return videoBack.getCurrentPosition();
+                return backMp.getCurrentPosition();
             } catch (Exception e) { /* ignore */ }
         }
-        if (videoLeft != null && currentGroup != null && currentGroup.hasVideo(VideoGroup.POSITION_LEFT)) {
+        if (leftMp != null) {
             try {
-                return videoLeft.getCurrentPosition();
+                return leftMp.getCurrentPosition();
             } catch (Exception e) { /* ignore */ }
         }
-        if (videoRight != null && currentGroup != null && currentGroup.hasVideo(VideoGroup.POSITION_RIGHT)) {
+        if (rightMp != null) {
             try {
-                return videoRight.getCurrentPosition();
+                return rightMp.getCurrentPosition();
             } catch (Exception e) { /* ignore */ }
         }
         return 0;
@@ -483,16 +623,18 @@ public class MultiVideoPlayerManager {
         if (isPrepared && currentGroup != null) {
             if (singleMode) {
                 // 切换到单路：先暂停多路视频
-                if (videoFront != null) videoFront.pause();
-                if (videoBack != null) videoBack.pause();
-                if (videoLeft != null) videoLeft.pause();
-                if (videoRight != null) videoRight.pause();
-                // 将源视频的内容显示到单路VideoView
+                for (MediaPlayer mp : textureMediaPlayers.values()) {
+                    if (mp != null && !mp.equals(textureMediaPlayers.get("single"))) {
+                        mp.pause();
+                    }
+                }
+                // 将源视频的内容显示到单路TextureView
                 loadSingleModeVideo(savedPosition, wasPlaying);
             } else {
                 // 切换回多路：暂停单路视频
-                if (videoSingle != null) {
-                    videoSingle.pause();
+                MediaPlayer singleMp = textureMediaPlayers.get("single");
+                if (singleMp != null) {
+                    singleMp.pause();
                 }
                 // 直接 seek 到保存的位置
                 seekTo(savedPosition);
@@ -500,14 +642,7 @@ public class MultiVideoPlayerManager {
                     play();
                 } else {
                     // 确保所有视频都暂停
-                    if (videoFront != null) videoFront.pause();
-                    if (videoBack != null) videoBack.pause();
-                    if (videoLeft != null) videoLeft.pause();
-                    if (videoRight != null) videoRight.pause();
-                    isPlaying = false;
-                    if (playbackListener != null) {
-                        playbackListener.onPlaybackStateChanged(false);
-                    }
+                    pause();
                 }
             }
         }
@@ -519,18 +654,71 @@ public class MultiVideoPlayerManager {
     private void loadSingleModeVideo(int seekPosition, boolean autoPlay) {
         if (currentGroup == null || videoSingle == null) return;
 
-        File videoFile = currentGroup.getVideoFile(singleModePosition);
+        // 检查是否是领克07模式且有full视频
+        AppConfig appConfig = new AppConfig(context);
+        boolean isLynkco07 = AppConfig.CAR_MODEL_LYNKCO_07.equals(appConfig.getCarModel());
+        boolean hasFull = currentGroup.hasVideo(VideoGroup.POSITION_FULL);
+        
+        File videoFile;
+        if (isLynkco07 && hasFull) {
+            // 领克07模式：使用full视频
+            videoFile = currentGroup.getFullVideo();
+        } else {
+            // 非领克07模式：使用对应位置的视频
+            videoFile = currentGroup.getVideoFile(singleModePosition);
+        }
+        
         if (videoFile != null && videoFile.exists()) {
             try {
+                // 创建MediaPlayer
+                MediaPlayer mediaPlayer = new MediaPlayer();
                 Uri uri = Uri.fromFile(videoFile);
-                videoSingle.setVideoURI(uri);
-                videoSingle.setOnPreparedListener(mp -> {
+                mediaPlayer.setDataSource(context, uri);
+                
+                // 设置Surface
+                videoSingle.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+                    @Override
+                    public void onSurfaceTextureAvailable(android.graphics.SurfaceTexture surface, int width, int height) {
+                        try {
+                            mediaPlayer.setSurface(new Surface(surface));
+                            mediaPlayer.prepareAsync();
+                        } catch (Exception e) {
+                            Log.e(TAG, "Failed to set surface for single mode", e);
+                        }
+                    }
+
+                    @Override
+                    public void onSurfaceTextureSizeChanged(android.graphics.SurfaceTexture surface, int width, int height) {
+                        // 应用裁切变换（如果是领克07模式）
+                        if (isLynkco07 && hasFull) {
+                            applyCropTransformIfNeeded(singleModePosition, videoSingle, mediaPlayer);
+                        }
+                    }
+
+                    @Override
+                    public boolean onSurfaceTextureDestroyed(android.graphics.SurfaceTexture surface) {
+                        return false;
+                    }
+
+                    @Override
+                    public void onSurfaceTextureUpdated(android.graphics.SurfaceTexture surface) {
+                    }
+                });
+
+                mediaPlayer.setOnPreparedListener(mp -> {
                     mediaPlayers.put("single", mp);
+                    textureMediaPlayers.put("single", mp);
                     // 行车记录仪视频没有声音，设置静音
                     mp.setVolume(0f, 0f);
                     setMediaPlayerSpeed(mp, currentSpeed);
                     // 放弃音频焦点
                     abandonAudioFocus();
+                    
+                    // 应用裁切变换（如果是领克07模式）
+                    if (isLynkco07 && hasFull) {
+                        applyCropTransformIfNeeded(singleModePosition, videoSingle, mp);
+                    }
+                    
                     // 视频准备好后再 seek 和播放
                     mp.seekTo(seekPosition);
                     
@@ -564,21 +752,10 @@ public class MultiVideoPlayerManager {
     }
 
     /**
-     * 获取单路模式对应的VideoView
+     * 获取单路模式对应的MediaPlayer
      */
-    private VideoView getSingleModeVideoView() {
-        switch (singleModePosition) {
-            case VideoGroup.POSITION_FRONT:
-                return videoFront;
-            case VideoGroup.POSITION_BACK:
-                return videoBack;
-            case VideoGroup.POSITION_LEFT:
-                return videoLeft;
-            case VideoGroup.POSITION_RIGHT:
-                return videoRight;
-            default:
-                return videoFront;
-        }
+    private MediaPlayer getSingleModeMediaPlayer() {
+        return textureMediaPlayers.get(singleModePosition);
     }
 
     /**

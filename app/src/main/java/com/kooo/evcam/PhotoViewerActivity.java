@@ -13,6 +13,9 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.kooo.evcam.AppConfig;
+import com.kooo.evcam.playback.PanoramicCropTransformation;
+
 import java.io.File;
 
 /**
@@ -46,8 +49,10 @@ public class PhotoViewerActivity extends AppCompatActivity {
         titleText = findViewById(R.id.photo_title);
         View btnClose = findViewById(R.id.btn_close);
 
-        // 获取图片路径
+        // 获取图片路径和位置信息
         String photoPath = getIntent().getStringExtra("photo_path");
+        String position = getIntent().getStringExtra("photo_position"); // front/back/left/right/full
+        
         if (photoPath == null || photoPath.isEmpty()) {
             Toast.makeText(this, "无效的图片路径", Toast.LENGTH_SHORT).show();
             finish();
@@ -64,8 +69,8 @@ public class PhotoViewerActivity extends AppCompatActivity {
         // 设置标题
         titleText.setText(photoFile.getName());
 
-        // 加载图片
-        loadPhoto(photoFile);
+        // 加载图片（如果是领克07模式且是full照片，且指定了位置，则裁切显示）
+        loadPhoto(photoFile, position);
 
         // 关闭按钮
         btnClose.setOnClickListener(v -> finish());
@@ -134,7 +139,30 @@ public class PhotoViewerActivity extends AppCompatActivity {
      * 加载图片
      */
     private void loadPhoto(File photoFile) {
+        loadPhoto(photoFile, null);
+    }
+
+    /**
+     * 加载图片（支持裁切）
+     */
+    private void loadPhoto(File photoFile, String position) {
         try {
+            // 检查是否是领克07模式且需要裁切
+            AppConfig appConfig = new AppConfig(this);
+            boolean isLynkco07 = AppConfig.CAR_MODEL_LYNKCO_07.equals(appConfig.getCarModel());
+            boolean needCrop = isLynkco07 && position != null && !position.equals("full") && 
+                              !position.isEmpty();
+
+            if (needCrop) {
+                // 需要裁切：从full照片裁切显示指定方向
+                float[] cropRegion = AppConfig.getPanoramicCropRegion(position);
+                if (cropRegion != null && cropRegion.length >= 4) {
+                    loadCroppedPhoto(photoFile, cropRegion);
+                    return;
+                }
+            }
+
+            // 不需要裁切：正常加载
             // 先获取图片尺寸
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inJustDecodeBounds = true;
@@ -165,6 +193,86 @@ public class PhotoViewerActivity extends AppCompatActivity {
                     int viewHeight = imageView.getHeight();
                     int bitmapWidth = bitmap.getWidth();
                     int bitmapHeight = bitmap.getHeight();
+
+                    float scale = Math.min(
+                        (float) viewWidth / bitmapWidth,
+                        (float) viewHeight / bitmapHeight
+                    );
+
+                    matrix.setScale(scale, scale);
+                    matrix.postTranslate(
+                        (viewWidth - bitmapWidth * scale) / 2,
+                        (viewHeight - bitmapHeight * scale) / 2
+                    );
+                    imageView.setImageMatrix(matrix);
+                });
+            } else {
+                Toast.makeText(this, "无法加载图片", Toast.LENGTH_SHORT).show();
+                finish();
+            }
+        } catch (Exception e) {
+            Toast.makeText(this, "加载图片失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            finish();
+        }
+    }
+
+    /**
+     * 加载裁切后的图片
+     */
+    private void loadCroppedPhoto(File photoFile, float[] cropRegion) {
+        try {
+            // 先获取图片尺寸
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(photoFile.getAbsolutePath(), options);
+
+            // 计算缩放比例（避免加载过大的图片导致OOM）
+            int maxSize = 2048;
+            int scaleFactor = 1;
+            if (options.outWidth > maxSize || options.outHeight > maxSize) {
+                scaleFactor = Math.max(
+                    options.outWidth / maxSize,
+                    options.outHeight / maxSize
+                );
+            }
+
+            // 加载图片
+            options.inJustDecodeBounds = false;
+            options.inSampleSize = scaleFactor;
+            Bitmap fullBitmap = BitmapFactory.decodeFile(photoFile.getAbsolutePath(), options);
+
+            if (fullBitmap != null) {
+                // 计算裁切区域（像素坐标）
+                int sourceWidth = fullBitmap.getWidth();
+                int sourceHeight = fullBitmap.getHeight();
+                int cropX = (int) (cropRegion[0] * sourceWidth);
+                int cropY = (int) (cropRegion[1] * sourceHeight);
+                int cropWidth = (int) (cropRegion[2] * sourceWidth);
+                int cropHeight = (int) (cropRegion[3] * sourceHeight);
+
+                // 确保裁切区域在图片范围内
+                cropX = Math.max(0, Math.min(cropX, sourceWidth - 1));
+                cropY = Math.max(0, Math.min(cropY, sourceHeight - 1));
+                cropWidth = Math.max(1, Math.min(cropWidth, sourceWidth - cropX));
+                cropHeight = Math.max(1, Math.min(cropHeight, sourceHeight - cropY));
+
+                // 从原图中裁切出指定区域
+                Bitmap croppedBitmap = Bitmap.createBitmap(fullBitmap, cropX, cropY, cropWidth, cropHeight);
+                
+                // 如果原图不是裁切后的图，释放原图
+                if (fullBitmap != croppedBitmap) {
+                    fullBitmap.recycle();
+                }
+
+                imageView.setImageBitmap(croppedBitmap);
+                imageView.setScaleType(ImageView.ScaleType.MATRIX);
+
+                // 初始化矩阵，使图片居中显示
+                imageView.post(() -> {
+                    int viewWidth = imageView.getWidth();
+                    int viewHeight = imageView.getHeight();
+                    int bitmapWidth = croppedBitmap.getWidth();
+                    int bitmapHeight = croppedBitmap.getHeight();
 
                     float scale = Math.min(
                         (float) viewWidth / bitmapWidth,

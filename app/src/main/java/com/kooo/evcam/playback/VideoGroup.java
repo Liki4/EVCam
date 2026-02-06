@@ -16,6 +16,7 @@ import java.util.Map;
 public class VideoGroup {
     
     /** 摄像头位置常量 */
+    public static final String POSITION_FULL = "full";
     public static final String POSITION_FRONT = "front";
     public static final String POSITION_BACK = "back";
     public static final String POSITION_LEFT = "left";
@@ -148,6 +149,13 @@ public class VideoGroup {
     public File getVideoFile(String position) {
         return videoFiles.get(position);
     }
+
+    /**
+     * 获取全景摄像头视频
+     */
+    public File getFullVideo() {
+        return videoFiles.get(POSITION_FULL);
+    }
     
     /**
      * 获取前置摄像头视频
@@ -189,7 +197,9 @@ public class VideoGroup {
      * 优先级：front > back > left > right
      */
     public File getThumbnailFile() {
-        if (videoFiles.containsKey(POSITION_FRONT)) {
+        if (videoFiles.containsKey(POSITION_FULL)) {
+            return videoFiles.get(POSITION_FULL);
+        } else if (videoFiles.containsKey(POSITION_FRONT)) {
             return videoFiles.get(POSITION_FRONT);
         } else if (videoFiles.containsKey(POSITION_BACK)) {
             return videoFiles.get(POSITION_BACK);
