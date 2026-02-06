@@ -13,6 +13,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -25,6 +26,13 @@ import androidx.fragment.app.Fragment;
  * 权限设置界面 Fragment
  */
 public class PermissionSettingsFragment extends Fragment {
+
+    // ADB 一键获取
+    private Button btnAdbGrantAll;
+    private ScrollView scrollAdbLog;
+    private TextView tvAdbLog;
+    private AdbPermissionHelper adbHelper;
+    private boolean isAdbRunning = false;
 
     // 基础权限
     private TextView tvCameraStatus;
@@ -88,6 +96,11 @@ public class PermissionSettingsFragment extends Fragment {
     }
 
     private void initViews(View view) {
+        // ADB 一键获取
+        btnAdbGrantAll = view.findViewById(R.id.btn_adb_grant_all);
+        scrollAdbLog = view.findViewById(R.id.scroll_adb_log);
+        tvAdbLog = view.findViewById(R.id.tv_adb_log);
+
         // 基础权限
         tvCameraStatus = view.findViewById(R.id.tv_camera_status);
         btnCameraPermission = view.findViewById(R.id.btn_camera_permission);
@@ -122,6 +135,9 @@ public class PermissionSettingsFragment extends Fragment {
     }
 
     private void setupClickListeners() {
+        // ADB 一键获取权限
+        btnAdbGrantAll.setOnClickListener(v -> startAdbGrant());
+
         // 相机权限
         btnCameraPermission.setOnClickListener(v -> openAppSettings());
         
@@ -464,5 +480,44 @@ public class PermissionSettingsFragment extends Fragment {
             AppLog.e("PermissionSettings", "打开无障碍设置失败", e);
             Toast.makeText(getContext(), "无法打开设置页面，请使用第三方权限管理工具设置", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    // ==================== ADB 一键获取权限 ====================
+
+    /**
+     * 启动 ADB 一键获取权限
+     */
+    private void startAdbGrant() {
+        if (isAdbRunning) return;
+        if (getContext() == null) return;
+
+        isAdbRunning = true;
+        btnAdbGrantAll.setEnabled(false);
+        btnAdbGrantAll.setText("正在执行...");
+        scrollAdbLog.setVisibility(View.VISIBLE);
+        tvAdbLog.setText("");
+
+        if (adbHelper == null) {
+            adbHelper = new AdbPermissionHelper(getContext());
+        }
+
+        adbHelper.grantAllPermissions(new AdbPermissionHelper.Callback() {
+            @Override
+            public void onLog(String message) {
+                if (getContext() == null) return;
+                tvAdbLog.append(message + "\n");
+                // 自动滚动到底部
+                scrollAdbLog.post(() -> scrollAdbLog.fullScroll(View.FOCUS_DOWN));
+            }
+
+            @Override
+            public void onComplete(boolean allSuccess) {
+                isAdbRunning = false;
+                btnAdbGrantAll.setEnabled(true);
+                btnAdbGrantAll.setText("一键获取权限");
+                // 刷新所有权限状态显示
+                updateAllPermissionStatus();
+            }
+        });
     }
 }
