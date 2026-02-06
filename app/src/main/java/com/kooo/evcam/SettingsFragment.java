@@ -1946,7 +1946,7 @@ public class SettingsFragment extends Fragment {
     }
     
     /**
-     * 显示下载完成对话框
+     * 显示下载完成对话框（提供 ADB 安装和手动安装两种方式）
      */
     private void showDownloadCompleteDialog(java.io.File apkFile, String newVersion) {
         if (getContext() == null) return;
@@ -1961,13 +1961,79 @@ public class SettingsFragment extends Fragment {
         
         String message = "EVCam v" + newVersion + " 已下载完成！\n\n" +
                 "文件位置：\n" + displayPath + "\n\n" +
-                "请使用文件管理器打开 Download 文件夹安装更新。";
+                "请选择安装方式：";
         
         new com.google.android.material.dialog.MaterialAlertDialogBuilder(getContext(), R.style.Theme_Cam_MaterialAlertDialog)
                 .setTitle("下载完成")
                 .setMessage(message)
-                .setPositiveButton("确定", null)
+                .setPositiveButton("ADB 安装", (dialog, which) -> {
+                    startAdbInstall(apkFile);
+                })
+                .setNeutralButton("手动安装", (dialog, which) -> {
+                    Toast.makeText(getContext(),
+                            "请使用文件管理器打开 Download 文件夹安装更新",
+                            Toast.LENGTH_LONG).show();
+                })
+                .setCancelable(false)
                 .show();
+    }
+    
+    /**
+     * 通过 ADB 安装 APK（弹出日志对话框显示进度）
+     */
+    private void startAdbInstall(java.io.File apkFile) {
+        if (getContext() == null) return;
+        
+        // 创建可滚动的日志视图
+        android.widget.ScrollView scrollView = new android.widget.ScrollView(getContext());
+        scrollView.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        // 限制最大高度，防止对话框过大
+        scrollView.setMinimumHeight(300);
+        
+        TextView logView = new TextView(getContext());
+        logView.setPadding(48, 24, 48, 24);
+        logView.setTextSize(12);
+        logView.setTypeface(android.graphics.Typeface.MONOSPACE);
+        logView.setTextColor(ContextCompat.getColor(getContext(), R.color.text_primary));
+        scrollView.addView(logView);
+        
+        androidx.appcompat.app.AlertDialog dialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(
+                getContext(), R.style.Theme_Cam_MaterialAlertDialog)
+                .setTitle("ADB 安装更新")
+                .setView(scrollView)
+                .setCancelable(false)
+                .setNegativeButton("关闭", null)
+                .create();
+        dialog.show();
+        
+        // 安装期间禁用关闭按钮
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE).setEnabled(false);
+        
+        AdbPermissionHelper adbHelper = new AdbPermissionHelper(getContext());
+        adbHelper.installApk(apkFile.getAbsolutePath(), new AdbPermissionHelper.Callback() {
+            @Override
+            public void onLog(String message) {
+                if (getContext() == null) return;
+                logView.append(message + "\n");
+                scrollView.post(() -> scrollView.fullScroll(View.FOCUS_DOWN));
+            }
+            
+            @Override
+            public void onComplete(boolean allSuccess) {
+                if (dialog.isShowing()) {
+                    dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE).setEnabled(true);
+                }
+                if (!allSuccess) {
+                    if (getContext() != null) {
+                        Toast.makeText(getContext(),
+                                "ADB 安装失败，请尝试手动安装",
+                                Toast.LENGTH_LONG).show();
+                    }
+                }
+                // 安装成功后 app 会被系统重启，不需要额外处理
+            }
+        });
     }
     
     // ==================== 日志上传相关方法 ====================
