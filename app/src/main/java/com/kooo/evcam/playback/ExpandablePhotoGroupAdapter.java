@@ -14,7 +14,9 @@ import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.request.RequestOptions;
 import com.bumptech.glide.signature.ObjectKey;
+import com.kooo.evcam.AppConfig;
 import com.kooo.evcam.R;
+import com.kooo.evcam.playback.PanoramicCropTransformation;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -208,11 +210,25 @@ public class ExpandablePhotoGroupAdapter extends RecyclerView.Adapter<RecyclerVi
         int count = group.getPhotoCount();
         holder.videoCountBadge.setText(count + "张");
 
-        // 加载四个位置的缩略图
-        loadThumbnail(group.getFrontPhoto(), holder.thumbFront);
-        loadThumbnail(group.getBackPhoto(), holder.thumbBack);
-        loadThumbnail(group.getLeftPhoto(), holder.thumbLeft);
-        loadThumbnail(group.getRightPhoto(), holder.thumbRight);
+        // 检查是否是领克07模式且有full照片
+        AppConfig appConfig = new AppConfig(context);
+        boolean isLynkco07 = AppConfig.CAR_MODEL_LYNKCO_07.equals(appConfig.getCarModel());
+        boolean hasFull = group.hasPhoto(PhotoGroup.POSITION_FULL);
+        
+        if (isLynkco07 && hasFull) {
+            // 领克07模式：从full照片裁切显示缩略图
+            File fullPhoto = group.getFullPhoto();
+            loadCroppedThumbnail(fullPhoto, holder.thumbFront, PhotoGroup.POSITION_FRONT);
+            loadCroppedThumbnail(fullPhoto, holder.thumbBack, PhotoGroup.POSITION_BACK);
+            loadCroppedThumbnail(fullPhoto, holder.thumbLeft, PhotoGroup.POSITION_LEFT);
+            loadCroppedThumbnail(fullPhoto, holder.thumbRight, PhotoGroup.POSITION_RIGHT);
+        } else {
+            // 非领克07模式或没有full照片：使用原有逻辑
+            loadThumbnail(group.getFrontPhoto(), holder.thumbFront);
+            loadThumbnail(group.getBackPhoto(), holder.thumbBack);
+            loadThumbnail(group.getLeftPhoto(), holder.thumbLeft);
+            loadThumbnail(group.getRightPhoto(), holder.thumbRight);
+        }
 
         // 选中状态样式
         boolean isSelected = selectedGroups.contains(group);
@@ -272,6 +288,39 @@ public class ExpandablePhotoGroupAdapter extends RecyclerView.Adapter<RecyclerVi
 
         Glide.with(context)
                 .load(photoFile)
+                .apply(options)
+                .into(imageView);
+    }
+    
+    /**
+     * 从full照片裁切并加载指定方向的缩略图
+     */
+    private void loadCroppedThumbnail(File fullPhotoFile, ImageView imageView, String position) {
+        if (fullPhotoFile == null || !fullPhotoFile.exists()) {
+            imageView.setImageDrawable(null);
+            imageView.setBackgroundColor(0xFF1A1A1A);
+            return;
+        }
+
+        // 获取裁切区域（归一化坐标）
+        float[] cropRegion = AppConfig.getPanoramicCropRegion(position);
+        if (cropRegion == null || cropRegion.length < 4) {
+            // 如果无法获取裁切区域，回退到正常加载
+            loadThumbnail(fullPhotoFile, imageView);
+            return;
+        }
+
+        // 使用Glide的transform进行裁切
+        RequestOptions options = new RequestOptions()
+                .centerCrop()
+                .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
+                .signature(new ObjectKey(fullPhotoFile.lastModified()))
+                .placeholder(android.R.color.black)
+                .error(android.R.color.black)
+                .transform(new PanoramicCropTransformation(cropRegion));
+
+        Glide.with(context)
+                .load(fullPhotoFile)
                 .apply(options)
                 .into(imageView);
     }
