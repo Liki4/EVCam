@@ -234,10 +234,10 @@ public class MainFloatingWindowView extends FrameLayout {
         }
 
         cancelRetryBind();
-        currentCamera.setMainFloatingSurface(surface);
 
         // 如果摄像头硬件还未打开（后台初始化时不打开），先打开
         if (!currentCamera.isCameraOpened()) {
+            currentCamera.setMainFloatingSurface(surface);
             AppLog.d(TAG, "Camera not opened yet, opening now for " + cameraPos);
             // 先打开当前需要的摄像头（优先保证能显示）
             currentCamera.openCamera();
@@ -249,6 +249,7 @@ public class MainFloatingWindowView extends FrameLayout {
                 cm.openAllCameras(); // 已打开的会跳过（isCameraOpened guard）
             }, 500);
         } else {
+            currentCamera.setMainFloatingSurface(surface);
             currentCamera.recreateSession(urgent);
         }
     }
@@ -259,7 +260,6 @@ public class MainFloatingWindowView extends FrameLayout {
 
     private void stopCameraPreview(boolean urgent) {
         if (currentCamera != null) {
-            // 立即停止推帧，防止 Surface 销毁后 queueBuffer abandoned 刷屏
             currentCamera.stopRepeatingNow();
             currentCamera.setMainFloatingSurface(null);
             currentCamera.recreateSession(urgent);
