@@ -47,6 +47,8 @@ public class BlindSpotFloatingWindowView extends FrameLayout {
     private int initialWidth, initialHeight;
     private boolean isResizing = false;
     private int resizeMode = 0;
+    private boolean isCurrentlySwapped = false;
+    private boolean hasUnsavedResize = false;
 
     public BlindSpotFloatingWindowView(Context context, boolean isSetupMode) {
         super(context);
@@ -69,7 +71,15 @@ public class BlindSpotFloatingWindowView extends FrameLayout {
         if (isSetupMode) {
             saveLayout.setVisibility(View.VISIBLE);
             saveButton.setOnClickListener(v -> {
-                appConfig.setTurnSignalFloatingBounds(params.x, params.y, params.width, params.height);
+                hasUnsavedResize = false;
+                // 若宽高因矫正旋转而交换过，保存前还原为基础值
+                int saveW = params.width;
+                int saveH = params.height;
+                if (isCurrentlySwapped) {
+                    saveW = params.height;
+                    saveH = params.width;
+                }
+                appConfig.setTurnSignalFloatingBounds(params.x, params.y, saveW, saveH);
                 appConfig.setTurnSignalFloatingRotation(currentRotation);
                 dismiss();
             });
@@ -202,6 +212,10 @@ public class BlindSpotFloatingWindowView extends FrameLayout {
                 return true;
 
             case MotionEvent.ACTION_UP:
+                if (isResizing) {
+                    hasUnsavedResize = true;
+                }
+                isResizing = false;
                 return true;
         }
         return super.onTouchEvent(event);
@@ -209,16 +223,20 @@ public class BlindSpotFloatingWindowView extends FrameLayout {
 
     public void setCamera(String cameraPos) {
         this.cameraPos = cameraPos;
-        stopCameraPreview();
+        stopCameraPreview(true); // 切换摄像头时使用紧急模式清除旧surface
         applyTransformNow();
         if (textureView.isAvailable() && cachedSurface != null && cachedSurface.isValid()) {
-            startCameraPreview(cachedSurface);
+            startCameraPreview(cachedSurface, true);
         } else {
             scheduleRetryBind();
         }
     }
 
     private void startCameraPreview(Surface surface) {
+        startCameraPreview(surface, false);
+    }
+
+    private void startCameraPreview(Surface surface, boolean urgent) {
         MainActivity mainActivity = MainActivity.getInstance();
         if (mainActivity == null) {
             scheduleRetryBind();
@@ -236,14 +254,18 @@ public class BlindSpotFloatingWindowView extends FrameLayout {
             return;
         }
         currentCamera.setMainFloatingSurface(surface);
-        currentCamera.recreateSession();
+        currentCamera.recreateSession(urgent);
         cancelRetryBind();
     }
 
     private void stopCameraPreview() {
+        stopCameraPreview(false);
+    }
+
+    private void stopCameraPreview(boolean urgent) {
         if (currentCamera != null) {
             currentCamera.setMainFloatingSurface(null);
-            currentCamera.recreateSession();
+            currentCamera.recreateSession(urgent);
             currentCamera = null;
         }
     }
@@ -263,6 +285,32 @@ public class BlindSpotFloatingWindowView extends FrameLayout {
     }
 
     public void applyTransformNow() {
+        // 矫正旋转 90/270 时，悬浮窗宽高互换，让画面自然填满不裁切
+        int correctionRotation = 0;
+        if (appConfig.isBlindSpotCorrectionEnabled() && cameraPos != null) {
+            correctionRotation = appConfig.getBlindSpotCorrectionRotation(cameraPos);
+        }
+        int baseW = appConfig.getTurnSignalFloatingWidth();
+        int baseH = appConfig.getTurnSignalFloatingHeight();
+        boolean shouldSwap = (correctionRotation == 90 || correctionRotation == 270);
+        isCurrentlySwapped = shouldSwap;
+        int targetW = shouldSwap ? baseH : baseW;
+        int targetH = shouldSwap ? baseW : baseH;
+
+        // 用户正在拖动缩放或有未保存的缩放时，不覆盖 params，以免打断手势或丢失调整
+        if (!isResizing && !hasUnsavedResize
+                && params != null && (params.width != targetW || params.height != targetH)) {
+            params.width = targetW;
+            params.height = targetH;
+            try {
+                if (getParent() != null) {
+                    windowManager.updateViewLayout(this, params);
+                }
+            } catch (Exception e) {
+                // Ignore
+            }
+        }
+
         BlindSpotCorrection.apply(textureView, appConfig, cameraPos, currentRotation);
     }
 

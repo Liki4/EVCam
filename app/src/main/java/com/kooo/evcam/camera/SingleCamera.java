@@ -1191,14 +1191,17 @@ public class SingleCamera {
                 AppLog.d(TAG, "Camera " + cameraId + " Surface[" + i + "]: " + s + ", isValid=" + s.isValid());
             }
 
-            // 【优化】手动关闭旧会话，并等待其彻底释放
+            // 【优化】手动关闭旧会话，并通过 CLOSED 回调立即重建
             if (captureSession != null) {
+                final CameraCaptureSession oldSession = captureSession;
+                captureSession = null;
                 try {
                     synchronized (sessionLock) {
                         isSessionClosing = true;
                     }
-                    captureSession.stopRepeating();
-                    captureSession.close();
+                    oldSession.stopRepeating();
+                    // 注册 CLOSED 回调后再 close，确保回调能触发重建
+                    oldSession.close();
                     AppLog.d(TAG, "Camera " + cameraId + " initiated session close");
                 } catch (Exception e) {
                     AppLog.e(TAG, "Camera " + cameraId + " error closing old session: " + e.getMessage());
@@ -1206,11 +1209,11 @@ public class SingleCamera {
                         isSessionClosing = false;
                     }
                 }
-                captureSession = null;
                 
-                // 延迟创建新会话，给 HAL 时间清理旧流
+                // 通过 onClosed 回调触发重建（见下方 sessionCloseCallback）
+                // 同时设置 300ms 安全兜底，防止 CLOSED 回调丢失
                 if (backgroundHandler != null) {
-                    backgroundHandler.postDelayed(this::createCameraPreviewSession, 300);
+                    backgroundHandler.postDelayed(this::createCameraPreviewSessionIfClosePending, 300);
                 }
                 synchronized (sessionLock) {
                     isConfiguring = false;
@@ -1347,8 +1350,18 @@ public class SingleCamera {
                 @Override
                 public void onClosed(@NonNull CameraCaptureSession session) {
                     AppLog.d(TAG, "Camera " + cameraId + " Session CLOSED callback received");
+                    boolean wasClosing;
                     synchronized (sessionLock) {
+                        wasClosing = isSessionClosing;
                         isSessionClosing = false;
+                    }
+                    // CLOSED 回调后 HAL 仍需少量时间释放 Surface 绑定
+                    // 延迟 50ms 重建（原 300ms 固定延迟 → 现 CLOSED + 50ms，总体更快更可靠）
+                    if (wasClosing && backgroundHandler != null) {
+                        // 移除所有待执行的重建任务，避免重复重建
+                        backgroundHandler.removeCallbacks(SingleCamera.this::createCameraPreviewSessionIfClosePending);
+                        backgroundHandler.removeCallbacks(recreateSessionRunnable);
+                        backgroundHandler.postDelayed(SingleCamera.this::createCameraPreviewSession, 50);
                     }
                 }
             };
@@ -1409,21 +1422,57 @@ public class SingleCamera {
     }
 
     /**
+     * 安全兜底：如果 CLOSED 回调未触发，300ms 后检查并重建
+     */
+    private void createCameraPreviewSessionIfClosePending() {
+        synchronized (sessionLock) {
+            if (isSessionClosing) {
+                // 回调还没来，继续等
+                return;
+            }
+        }
+        // CLOSED 回调已经来过但没触发重建（理论上不该到这），或回调丢失，兜底重建
+        if (cameraDevice != null && captureSession == null) {
+            AppLog.d(TAG, "Camera " + cameraId + " session close fallback triggered");
+            createCameraPreviewSession();
+        }
+    }
+
+    /**
      * 重新创建会话（用于开始/停止录制时，或者悬浮窗切换时）
      * 增加防抖处理，避免频繁重建导致黑屏
      */
     private final Runnable recreateSessionRunnable = this::createCameraPreviewSession;
 
     public void recreateSession() {
+        recreateSession(false);
+    }
+
+    /**
+     * 重新创建会话
+     * @param urgent 紧急模式（如补盲悬浮窗），跳过防抖延迟以最快速度重建
+     */
+    public void recreateSession(boolean urgent) {
         if (cameraDevice != null) {
             if (backgroundHandler != null) {
                 // 移除待执行的任务，实现防抖
                 backgroundHandler.removeCallbacks(recreateSessionRunnable);
                 
-                // 如果正在配置中，增加延迟再重试，确保能捕获到最新的 Surface 变化
-                int delay = isConfiguring ? 500 : 100;
-                backgroundHandler.postDelayed(recreateSessionRunnable, delay);
-                AppLog.d(TAG, "Camera " + cameraId + " recreateSession scheduled (delay=" + delay + "ms, isConfiguring=" + isConfiguring + ")");
+                int delay;
+                if (urgent) {
+                    // 紧急模式：最小延迟，用于补盲悬浮窗等需要快速响应的场景
+                    delay = isConfiguring ? 50 : 0;
+                } else {
+                    // 普通模式：保持防抖延迟
+                    delay = isConfiguring ? 500 : 100;
+                }
+
+                if (delay == 0) {
+                    backgroundHandler.post(recreateSessionRunnable);
+                } else {
+                    backgroundHandler.postDelayed(recreateSessionRunnable, delay);
+                }
+                AppLog.d(TAG, "Camera " + cameraId + " recreateSession scheduled (delay=" + delay + "ms, isConfiguring=" + isConfiguring + ", urgent=" + urgent + ")");
             } else {
                 createCameraPreviewSession();
             }

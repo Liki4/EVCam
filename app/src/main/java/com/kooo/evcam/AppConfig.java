@@ -1517,12 +1517,32 @@ public class AppConfig {
         return prefs.getFloat(getBlindSpotCorrectionKey(cameraPos, "translate_y"), 0.0f);
     }
 
+    public void setBlindSpotCorrectionRotation(String cameraPos, int rotation) {
+        prefs.edit().putInt(getBlindSpotCorrectionKey(cameraPos, "rotation"), rotation).apply();
+    }
+
+    public int getBlindSpotCorrectionRotation(String cameraPos) {
+        // 兼容旧的 float 存储，读取后转换
+        try {
+            return prefs.getInt(getBlindSpotCorrectionKey(cameraPos, "rotation"), 0);
+        } catch (ClassCastException e) {
+            // 旧版本存的是 float，读取并转换
+            float old = prefs.getFloat(getBlindSpotCorrectionKey(cameraPos, "rotation"), 0.0f);
+            int rounded = Math.round(old);
+            // 规整到 0/90/180/270
+            if (rounded != 0 && rounded != 90 && rounded != 180 && rounded != 270) rounded = 0;
+            setBlindSpotCorrectionRotation(cameraPos, rounded);
+            return rounded;
+        }
+    }
+
     public void resetBlindSpotCorrection(String cameraPos) {
         prefs.edit()
                 .putFloat(getBlindSpotCorrectionKey(cameraPos, "scale_x"), 1.0f)
                 .putFloat(getBlindSpotCorrectionKey(cameraPos, "scale_y"), 1.0f)
                 .putFloat(getBlindSpotCorrectionKey(cameraPos, "translate_x"), 0.0f)
                 .putFloat(getBlindSpotCorrectionKey(cameraPos, "translate_y"), 0.0f)
+                .putInt(getBlindSpotCorrectionKey(cameraPos, "rotation"), 0)
                 .apply();
     }
 

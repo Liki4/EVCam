@@ -80,8 +80,9 @@ public class CameraForegroundService extends Service {
                     FloatingWindowService.start(this);
                 }
                 
-                // 启动补盲选项服务 (副屏/主屏悬浮窗/转向灯联动)
-                if (appConfig.isSecondaryDisplayEnabled() || appConfig.isMainFloatingEnabled() || appConfig.isTurnSignalLinkageEnabled()) {
+                // 启动补盲选项服务 (副屏/主屏悬浮窗/转向灯联动/模拟按钮)
+                if (appConfig.isSecondaryDisplayEnabled() || appConfig.isMainFloatingEnabled()
+                        || appConfig.isTurnSignalLinkageEnabled() || appConfig.isMockTurnSignalFloatingEnabled()) {
                     AppLog.d(TAG, "补盲选项已启用，从 Service 启动...");
                     BlindSpotService.update(this);
                 }

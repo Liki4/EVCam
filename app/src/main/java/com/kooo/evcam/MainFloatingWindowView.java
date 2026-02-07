@@ -33,6 +33,7 @@ public class MainFloatingWindowView extends FrameLayout {
     private Surface cachedSurface;
     private SingleCamera currentCamera;
     private String desiredCameraPos;
+    private boolean urgentPending = false; // 下次 startCameraPreview 使用紧急模式
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Runnable retryBindRunnable;
@@ -43,6 +44,7 @@ public class MainFloatingWindowView extends FrameLayout {
     private int initialWidth, initialHeight;
     private boolean isResizing = false;
     private int resizeMode = 0; // 0: 拖动, 1: 左, 2: 右, 4: 上, 8: 下 (位运算组合)
+    private boolean isCurrentlySwapped = false;
 
     public MainFloatingWindowView(Context context) {
         super(context);
@@ -90,7 +92,9 @@ public class MainFloatingWindowView extends FrameLayout {
                     cachedSurface.release();
                 }
                 cachedSurface = new Surface(surface);
-                startCameraPreview(cachedSurface);
+                boolean urgent = urgentPending;
+                urgentPending = false;
+                startCameraPreview(cachedSurface, urgent);
                 applyTransformNow();
             }
 
@@ -179,14 +183,25 @@ public class MainFloatingWindowView extends FrameLayout {
                 return true;
 
             case MotionEvent.ACTION_UP:
-                // 保存配置
-                appConfig.setMainFloatingBounds(params.x, params.y, params.width, params.height);
+                isResizing = false;
+                // 保存配置：若宽高因矫正旋转而交换过，保存前还原为基础值
+                int saveW = params.width;
+                int saveH = params.height;
+                if (isCurrentlySwapped) {
+                    saveW = params.height;
+                    saveH = params.width;
+                }
+                appConfig.setMainFloatingBounds(params.x, params.y, saveW, saveH);
                 return true;
         }
         return super.onTouchEvent(event);
     }
 
     private void startCameraPreview(Surface surface) {
+        startCameraPreview(surface, false);
+    }
+
+    private void startCameraPreview(Surface surface, boolean urgent) {
         if (surface == null || !surface.isValid()) {
             scheduleRetryBind();
             return;
@@ -212,13 +227,17 @@ public class MainFloatingWindowView extends FrameLayout {
 
         cancelRetryBind();
         currentCamera.setMainFloatingSurface(surface);
-        currentCamera.recreateSession();
+        currentCamera.recreateSession(urgent);
     }
 
     private void stopCameraPreview() {
+        stopCameraPreview(false);
+    }
+
+    private void stopCameraPreview(boolean urgent) {
         if (currentCamera != null) {
             currentCamera.setMainFloatingSurface(null);
-            currentCamera.recreateSession();
+            currentCamera.recreateSession(urgent);
             currentCamera = null;
         }
     }
@@ -269,9 +288,20 @@ public class MainFloatingWindowView extends FrameLayout {
 
     /**
      * 更新当前显示的摄像头
+     * @param cameraPos 摄像头位置
      */
     public void updateCamera(String cameraPos) {
+        updateCamera(cameraPos, false);
+    }
+
+    /**
+     * 更新当前显示的摄像头
+     * @param cameraPos 摄像头位置
+     * @param urgent 紧急模式（补盲转向灯触发时使用，最小化延迟）
+     */
+    public void updateCamera(String cameraPos, boolean urgent) {
         desiredCameraPos = cameraPos;
+        if (urgent) urgentPending = true; // 保留紧急标记，供 SurfaceTexture 就绪回调使用
         MainActivity mainActivity = MainActivity.getInstance();
         if (mainActivity == null) {
             scheduleRetryBind();
@@ -289,7 +319,7 @@ public class MainFloatingWindowView extends FrameLayout {
             return;
         }
 
-        stopCameraPreview();
+        stopCameraPreview(urgent);
         currentCamera = newCamera;
         if (currentCamera != null && textureView.isAvailable()) {
             android.graphics.SurfaceTexture surfaceTexture = textureView.getSurfaceTexture();
@@ -304,7 +334,7 @@ public class MainFloatingWindowView extends FrameLayout {
                 cachedSurface = new Surface(textureView.getSurfaceTexture());
             }
             currentCamera.setMainFloatingSurface(cachedSurface);
-            currentCamera.recreateSession();
+            currentCamera.recreateSession(urgent);
             cancelRetryBind();
             applyTransformNow();
         } else {
@@ -314,6 +344,34 @@ public class MainFloatingWindowView extends FrameLayout {
 
     public void applyTransformNow() {
         String cameraPos = desiredCameraPos != null ? desiredCameraPos : appConfig.getMainFloatingCamera();
+
+        // 矫正旋转 90/270 时，悬浮窗宽高互换，让画面自然填满不裁切
+        int correctionRotation = 0;
+        if (appConfig.isBlindSpotCorrectionEnabled() && cameraPos != null) {
+            correctionRotation = appConfig.getBlindSpotCorrectionRotation(cameraPos);
+        }
+        int baseW = appConfig.getMainFloatingWidth();
+        int baseH = appConfig.getMainFloatingHeight();
+        boolean shouldSwap = (correctionRotation == 90 || correctionRotation == 270);
+        isCurrentlySwapped = shouldSwap;
+        int targetW = shouldSwap ? baseH : baseW;
+        int targetH = shouldSwap ? baseW : baseH;
+
+        // 用户正在拖动缩放时，不覆盖 params，以免打断手势
+        if (!isResizing) {
+            if (params.width != targetW || params.height != targetH) {
+                params.width = targetW;
+                params.height = targetH;
+                try {
+                    if (getParent() != null) {
+                        windowManager.updateViewLayout(this, params);
+                    }
+                } catch (Exception e) {
+                    AppLog.e(TAG, "Error updating layout for rotation: " + e.getMessage());
+                }
+            }
+        }
+
         BlindSpotCorrection.apply(textureView, appConfig, cameraPos, 0);
     }
 
@@ -321,7 +379,10 @@ public class MainFloatingWindowView extends FrameLayout {
         cancelRetryBind();
         retryBindCount++;
         long delayMs;
-        if (retryBindCount <= 10) {
+        if (urgentPending && retryBindCount <= 5) {
+            // 紧急模式下前几次快速重试
+            delayMs = 50;
+        } else if (retryBindCount <= 10) {
             delayMs = 500;
         } else if (retryBindCount <= 30) {
             delayMs = 1000;
@@ -345,7 +406,9 @@ public class MainFloatingWindowView extends FrameLayout {
                 }
                 cachedSurface = new Surface(st);
             }
-            startCameraPreview(cachedSurface);
+            boolean urgent = urgentPending;
+            urgentPending = false;
+            startCameraPreview(cachedSurface, urgent);
         };
         mainHandler.postDelayed(retryBindRunnable, delayMs);
     }

@@ -118,35 +118,48 @@ public class BlindSpotService extends Service {
         currentSignalCamera = cameraPos;
         AppLog.d(TAG, "转向灯触发摄像头: " + cameraPos);
 
+        // 确保 MainActivity 已启动（摄像头由其管理，未启动时悬浮窗会黑屏）
+        if (MainActivity.getInstance() == null) {
+            AppLog.d(TAG, "MainActivity 未初始化，正在启动以初始化摄像头...");
+            try {
+                Intent launchIntent = new Intent(this, MainActivity.class);
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(launchIntent);
+            } catch (Exception e) {
+                AppLog.e(TAG, "启动 MainActivity 失败: " + e.getMessage());
+            }
+        }
+
         boolean reuseMain = appConfig.isTurnSignalReuseMainFloating();
 
         if (reuseMain) {
             // --- 复用主屏悬浮窗逻辑 ---
-            if (mainFloatingWindowView == null) {
-                // 如果没开启，则尝试弹出临时悬浮窗
-                if (WakeUpHelper.hasOverlayPermission(this)) {
-                    mainFloatingWindowView = new MainFloatingWindowView(this);
-                    mainFloatingWindowView.show();
-                    isMainTempShown = true;
-                    AppLog.d(TAG, "主屏开启临时补盲悬浮窗");
-                }
-            }
+            // 切换方向时重建悬浮窗，确保窗口尺寸/旋转参数与新摄像头匹配
             if (mainFloatingWindowView != null) {
-                mainFloatingWindowView.updateCamera(cameraPos);
+                mainFloatingWindowView.dismiss();
+                mainFloatingWindowView = null;
+            }
+            if (WakeUpHelper.hasOverlayPermission(this)) {
+                mainFloatingWindowView = new MainFloatingWindowView(this);
+                mainFloatingWindowView.updateCamera(cameraPos, true);
+                mainFloatingWindowView.show();
+                isMainTempShown = true;
+                AppLog.d(TAG, "主屏开启临时补盲悬浮窗");
             }
         } else {
             // --- 使用独立补盲悬浮窗逻辑 ---
-            // 1. 关闭主屏悬浮窗 (如果有)
+            // 切换方向时重建悬浮窗
             if (mainFloatingWindowView != null) {
                 mainFloatingWindowView.dismiss();
                 mainFloatingWindowView = null;
                 isMainTempShown = false;
             }
-            // 2. 显示独立补盲窗
-            if (dedicatedBlindSpotWindow == null) {
-                dedicatedBlindSpotWindow = new BlindSpotFloatingWindowView(this, false);
-                dedicatedBlindSpotWindow.show();
+            if (dedicatedBlindSpotWindow != null) {
+                dedicatedBlindSpotWindow.dismiss();
+                dedicatedBlindSpotWindow = null;
             }
+            dedicatedBlindSpotWindow = new BlindSpotFloatingWindowView(this, false);
+            dedicatedBlindSpotWindow.show();
             dedicatedBlindSpotWindow.setCamera(cameraPos);
         }
 
@@ -207,7 +220,7 @@ public class BlindSpotService extends Service {
             }
             AppLog.d(TAG, "副屏绑定新 Surface 并重建 Session: " + cameraPos);
             secondaryCamera.setSecondaryDisplaySurface(secondaryCachedSurface);
-            secondaryCamera.recreateSession();
+            secondaryCamera.recreateSession(true); // 紧急模式，最小化延迟
             BlindSpotCorrection.apply(secondaryTextureView, appConfig, cameraPos, appConfig.getSecondaryDisplayRotation());
         } else {
             AppLog.d(TAG, "副屏 TextureView 尚未就绪，暂不绑定 Surface: " + cameraPos);

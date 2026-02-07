@@ -18,6 +18,10 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import android.util.DisplayMetrics;
+import android.view.Window;
+import android.view.WindowManager;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
@@ -67,7 +71,34 @@ public class BlindSpotDisclaimerDialogFragment extends DialogFragment {
     @Override
     public void onStart() {
         super.onStart();
+        adjustDialogSize();
         startCountdown();
+    }
+
+    private void adjustDialogSize() {
+        Dialog dialog = getDialog();
+        if (dialog == null) return;
+        Window window = dialog.getWindow();
+        if (window == null) return;
+
+        DisplayMetrics dm = requireContext().getResources().getDisplayMetrics();
+        int screenW = dm.widthPixels;
+        int screenH = dm.heightPixels;
+        float density = dm.density;
+        boolean isLandscape = screenW > screenH;
+
+        int dialogW, dialogH;
+        if (isLandscape) {
+            // Landscape (car displays): use most of height with margins, limit width
+            dialogH = Math.min((int) (screenH * 0.88), (int) (600 * density));
+            dialogW = Math.min((int) (screenW * 0.55), (int) (480 * density));
+        } else {
+            // Portrait: cap at original content size (~590dp) to keep original look
+            int originalContentPx = (int) (590 * density);
+            dialogH = Math.min(originalContentPx, (int) (screenH * 0.85));
+            dialogW = WindowManager.LayoutParams.MATCH_PARENT;
+        }
+        window.setLayout(dialogW, dialogH);
     }
 
     @Override

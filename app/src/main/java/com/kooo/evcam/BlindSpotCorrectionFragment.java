@@ -26,6 +26,8 @@ public class BlindSpotCorrectionFragment extends Fragment {
     private static final float TRANSLATE_MAX = 5.00f;
     private static final float TRANSLATE_STEP = 0.01f;
 
+    private static final int[] ROTATION_VALUES = {0, 90, 180, 270};
+
     private Button backButton;
     private Button homeButton;
     private Spinner cameraSpinner;
@@ -34,6 +36,7 @@ public class BlindSpotCorrectionFragment extends Fragment {
     private SeekBar seekScaleY;
     private SeekBar seekTranslateX;
     private SeekBar seekTranslateY;
+    private Spinner spinnerRotation;
 
     private TextView tvScaleX;
     private TextView tvScaleY;
@@ -75,6 +78,7 @@ public class BlindSpotCorrectionFragment extends Fragment {
         seekScaleY = view.findViewById(R.id.seek_scale_y);
         seekTranslateX = view.findViewById(R.id.seek_translate_x);
         seekTranslateY = view.findViewById(R.id.seek_translate_y);
+        spinnerRotation = view.findViewById(R.id.spinner_rotation);
 
         tvScaleX = view.findViewById(R.id.tv_scale_x);
         tvScaleY = view.findViewById(R.id.tv_scale_y);
@@ -98,6 +102,11 @@ public class BlindSpotCorrectionFragment extends Fragment {
         seekScaleY.setMax((int) Math.round((SCALE_MAX - SCALE_MIN) / SCALE_STEP));
         seekTranslateX.setMax((int) Math.round((TRANSLATE_MAX - TRANSLATE_MIN) / TRANSLATE_STEP));
         seekTranslateY.setMax((int) Math.round((TRANSLATE_MAX - TRANSLATE_MIN) / TRANSLATE_STEP));
+
+        String[] rotationLabels = {"0°", "90°", "180°", "270°"};
+        ArrayAdapter<String> rotAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, rotationLabels);
+        rotAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerRotation.setAdapter(rotAdapter);
     }
 
     private void setupListeners() {
@@ -171,6 +180,19 @@ public class BlindSpotCorrectionFragment extends Fragment {
         seekTranslateX.setOnSeekBarChangeListener(seekListener);
         seekTranslateY.setOnSeekBarChangeListener(seekListener);
 
+        spinnerRotation.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            private boolean first = true;
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (first) { first = false; return; }
+                int rotation = ROTATION_VALUES[position];
+                appConfig.setBlindSpotCorrectionRotation(currentCameraPos, rotation);
+                BlindSpotService.update(requireContext());
+            }
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
         resetButton.setOnClickListener(v -> {
             appConfig.resetBlindSpotCorrection(currentCameraPos);
             loadFromConfig(currentCameraPos);
@@ -188,6 +210,7 @@ public class BlindSpotCorrectionFragment extends Fragment {
         float scaleY = appConfig.getBlindSpotCorrectionScaleY(cameraPos);
         float translateX = appConfig.getBlindSpotCorrectionTranslateX(cameraPos);
         float translateY = appConfig.getBlindSpotCorrectionTranslateY(cameraPos);
+        int rotation = appConfig.getBlindSpotCorrectionRotation(cameraPos);
 
         int px = scaleToProgress(scaleX);
         int py = scaleToProgress(scaleY);
@@ -198,6 +221,7 @@ public class BlindSpotCorrectionFragment extends Fragment {
         seekScaleY.setProgress(py);
         seekTranslateX.setProgress(tx);
         seekTranslateY.setProgress(ty);
+        spinnerRotation.setSelection(rotationToIndex(rotation));
 
         tvScaleX.setText(format2(progressToScale(px)));
         tvScaleY.setText(format2(progressToScale(py)));
@@ -259,6 +283,13 @@ public class BlindSpotCorrectionFragment extends Fragment {
 
     private float progressToTranslate(int progress) {
         return TRANSLATE_MIN + progress * TRANSLATE_STEP;
+    }
+
+    private int rotationToIndex(int rotation) {
+        for (int i = 0; i < ROTATION_VALUES.length; i++) {
+            if (ROTATION_VALUES[i] == rotation) return i;
+        }
+        return 0;
     }
 
     private float clamp(float v, float min, float max) {
