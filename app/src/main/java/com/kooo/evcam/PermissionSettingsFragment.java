@@ -9,6 +9,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -19,6 +20,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
@@ -33,6 +35,7 @@ public class PermissionSettingsFragment extends Fragment {
     private TextView tvAdbLog;
     private AdbPermissionHelper adbHelper;
     private boolean isAdbRunning = false;
+    private boolean autoScrollAdbLog = true;
 
     // 基础权限
     private TextView tvCameraStatus;
@@ -57,6 +60,15 @@ public class PermissionSettingsFragment extends Fragment {
     private Button btnAccessibilityPermission;
     private TextView tvBatteryStatus;
     private Button btnBatteryPermission;
+
+    // 系统白名单（E245）
+    private Button btnSystemWhitelist;
+    private TextView tvWhitelistStatus;
+    private ScrollView scrollWhitelistLog;
+    private TextView tvWhitelistLog;
+    private SystemWhitelistHelper whitelistHelper;
+    private boolean isWhitelistRunning = false;
+    private boolean autoScrollWhitelistLog = true;
 
     @Nullable
     @Override
@@ -100,6 +112,14 @@ public class PermissionSettingsFragment extends Fragment {
         btnAdbGrantAll = view.findViewById(R.id.btn_adb_grant_all);
         scrollAdbLog = view.findViewById(R.id.scroll_adb_log);
         tvAdbLog = view.findViewById(R.id.tv_adb_log);
+        // 触摸日志区域时：1.阻止外层ScrollView拦截，让日志可滑动 2.停止自动滚动
+        scrollAdbLog.setOnTouchListener((v, event) -> {
+            v.getParent().requestDisallowInterceptTouchEvent(true);
+            if (event.getAction() == MotionEvent.ACTION_DOWN || event.getAction() == MotionEvent.ACTION_MOVE) {
+                autoScrollAdbLog = false;
+            }
+            return false;
+        });
 
         // 基础权限
         tvCameraStatus = view.findViewById(R.id.tv_camera_status);
@@ -124,6 +144,20 @@ public class PermissionSettingsFragment extends Fragment {
         btnAccessibilityPermission = view.findViewById(R.id.btn_accessibility_permission);
         tvBatteryStatus = view.findViewById(R.id.tv_battery_status);
         btnBatteryPermission = view.findViewById(R.id.btn_battery_permission);
+        
+        // 系统白名单（E245）
+        btnSystemWhitelist = view.findViewById(R.id.btn_system_whitelist);
+        tvWhitelistStatus = view.findViewById(R.id.tv_whitelist_status);
+        scrollWhitelistLog = view.findViewById(R.id.scroll_whitelist_log);
+        tvWhitelistLog = view.findViewById(R.id.tv_whitelist_log);
+        // 触摸日志区域时：1.阻止外层ScrollView拦截，让日志可滑动 2.停止自动滚动
+        scrollWhitelistLog.setOnTouchListener((v, event) -> {
+            v.getParent().requestDisallowInterceptTouchEvent(true);
+            if (event.getAction() == MotionEvent.ACTION_DOWN || event.getAction() == MotionEvent.ACTION_MOVE) {
+                autoScrollWhitelistLog = false;
+            }
+            return false;
+        });
         
         // 根据系统版本显示/隐藏某些选项
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -176,6 +210,9 @@ public class PermissionSettingsFragment extends Fragment {
                 WakeUpHelper.requestIgnoreBatteryOptimizations(getContext());
             }
         });
+        
+        // 系统白名单（E245）
+        btnSystemWhitelist.setOnClickListener(v -> showWhitelistRiskDialog());
     }
 
     @Override
@@ -492,6 +529,7 @@ public class PermissionSettingsFragment extends Fragment {
         if (getContext() == null) return;
 
         isAdbRunning = true;
+        autoScrollAdbLog = true;
         btnAdbGrantAll.setEnabled(false);
         btnAdbGrantAll.setText("正在执行...");
         scrollAdbLog.setVisibility(View.VISIBLE);
@@ -506,8 +544,9 @@ public class PermissionSettingsFragment extends Fragment {
             public void onLog(String message) {
                 if (getContext() == null) return;
                 tvAdbLog.append(message + "\n");
-                // 自动滚动到底部
-                scrollAdbLog.post(() -> scrollAdbLog.fullScroll(View.FOCUS_DOWN));
+                if (autoScrollAdbLog) {
+                    scrollAdbLog.post(() -> scrollAdbLog.fullScroll(View.FOCUS_DOWN));
+                }
             }
 
             @Override
@@ -517,6 +556,77 @@ public class PermissionSettingsFragment extends Fragment {
                 btnAdbGrantAll.setText("一键获取权限");
                 // 刷新所有权限状态显示
                 updateAllPermissionStatus();
+            }
+        });
+    }
+
+    // ==================== E245 系统白名单配置 ====================
+
+    /**
+     * 显示风险提醒对话框
+     */
+    private void showWhitelistRiskDialog() {
+        if (getContext() == null) return;
+
+        new MaterialAlertDialogBuilder(getContext(), R.style.Theme_Cam_MaterialAlertDialog)
+                .setTitle("风险提醒")
+                .setMessage("此操作将修改车机系统分区的配置文件，请仔细阅读：\n\n"
+                        + "1. 仅适用于银河E5（E245）车机\n"
+                        + "2. 需要设备已打开USB调试\n"
+                        + "3. 将修改 system 和 vendor 分区的 3 个 XML 文件\n"
+                        + "4. 修改前会自动备份原文件到 /sdcard/evcam_backup/\n"
+                        + "5. 修改完成后需要重启车机才能生效\n"
+                        + "6. 本脚本理论上不会对车机造成危害，但出现任何问题均请自行承担后果\n"
+                        + "7. 如果设备不是 E245，脚本会自动检测并中止。\n\n"
+                        + "确认要继续执行吗？")
+                .setPositiveButton("确认执行", (dialog, which) -> startWhitelistSetup())
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /**
+     * 启动系统白名单配置
+     */
+    private void startWhitelistSetup() {
+        if (isWhitelistRunning) return;
+        if (getContext() == null) return;
+
+        isWhitelistRunning = true;
+        autoScrollWhitelistLog = true;
+        btnSystemWhitelist.setEnabled(false);
+        btnSystemWhitelist.setText("正在执行...");
+        scrollWhitelistLog.setVisibility(View.VISIBLE);
+        tvWhitelistLog.setText("");
+
+        if (whitelistHelper == null) {
+            whitelistHelper = new SystemWhitelistHelper(getContext());
+        }
+
+        whitelistHelper.executeWhitelistSetup(new SystemWhitelistHelper.Callback() {
+            @Override
+            public void onLog(String message) {
+                if (getContext() == null) return;
+                tvWhitelistLog.append(message + "\n");
+                if (autoScrollWhitelistLog) {
+                    scrollWhitelistLog.post(() -> scrollWhitelistLog.fullScroll(View.FOCUS_DOWN));
+                }
+            }
+
+            @Override
+            public void onComplete(boolean success) {
+                isWhitelistRunning = false;
+                btnSystemWhitelist.setEnabled(true);
+                btnSystemWhitelist.setText("一键配置");
+
+                if (getContext() == null) return;
+
+                if (success) {
+                    tvWhitelistStatus.setText("配置成功 - 请重启车机使配置生效");
+                    tvWhitelistStatus.setTextColor(getResources().getColor(android.R.color.holo_green_dark, null));
+                } else {
+                    tvWhitelistStatus.setText("配置失败 - 请查看日志了解详情");
+                    tvWhitelistStatus.setTextColor(getResources().getColor(android.R.color.holo_red_dark, null));
+                }
             }
         });
     }

@@ -56,5 +56,18 @@
         <item name="colorOnSurface">#FFFFFF</item>
         <!-- 按钮颜色 -->
         <item name="colorPrimary">#64B5F6</item>
+        <!-- 增大字号适配车机屏幕 -->
+        <item name="materialAlertDialogTitleTextStyle">@style/MaterialAlertDialog.Cam.Title</item>
+        <item name="materialAlertDialogBodyTextStyle">@style/MaterialAlertDialog.Cam.Body</item>
+    </style>
+
+    <!-- 对话框标题字号 -->
+    <style name="MaterialAlertDialog.Cam.Title" parent="MaterialAlertDialog.Material3.Title.Text">
+        <item name="android:textSize">22sp</item>
+    </style>
+
+    <!-- 对话框正文字号 -->
+    <style name="MaterialAlertDialog.Cam.Body" parent="MaterialAlertDialog.Material3.Body.Text">
+        <item name="android:textSize">18sp</item>
     </style>
 </resources>

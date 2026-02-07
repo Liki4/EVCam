@@ -504,23 +504,71 @@
                     android:textColor="@color/button_text" />
             </LinearLayout>
 
-            <!-- 权限说明 -->
+            <!-- ========== 系统级保活（E245） ========== -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="权限说明"
+                android:text="系统级保活"
                 android:textColor="@color/text_primary"
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:layout_marginBottom="12dp" />
 
-            <TextView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="• 相机、麦克风、存储：核心功能必需权限\n\n• 通知权限：用于在后台录制时显示状态通知\n\n• 所有文件访问：仅当需要存储到U盘时授予\n\n• 悬浮窗权限：用于悬浮录制按钮和后台钉钉命令唤醒\n\n• 无障碍服务：防止应用被系统清理\n\n• 电池优化：关闭可防止应用被系统休眠"
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp"
-                android:lineSpacingExtra="4dp" />
+                android:orientation="vertical"
+                android:background="@color/card_background"
+                android:padding="16dp"
+                android:layout_marginBottom="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="银河E5（E245）系统白名单"
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tv_whitelist_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="将 EVCam 添加到车机系统启动列表和后台白名单，防止深度睡眠后被杀"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="12dp" />
+
+                <Button
+                    android:id="@+id/btn_system_whitelist"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="一键配置"
+                    android:textSize="16sp"
+                    android:backgroundTint="#FF2196F3"
+                    android:textColor="#FFFFFFFF" />
+
+                <ScrollView
+                    android:id="@+id/scroll_whitelist_log"
+                    android:layout_width="match_parent"
+                    android:layout_height="280dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@color/page_background"
+                    android:padding="10dp"
+                    android:visibility="gone"
+                    android:fillViewport="false">
+
+                    <TextView
+                        android:id="@+id/tv_whitelist_log"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace"
+                        android:lineSpacingExtra="2dp" />
+                </ScrollView>
+            </LinearLayout>
 
         </LinearLayout>
     </ScrollView>
