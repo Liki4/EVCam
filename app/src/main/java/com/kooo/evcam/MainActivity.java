@@ -90,6 +90,17 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
     private AutoFitTextureView textureFront, textureBack, textureLeft, textureRight;
     private final java.util.Map<String, android.graphics.Matrix> previewBaseTransforms = new java.util.HashMap<>();
     private PreviewCorrectionFloatingWindow previewCorrectionFloatingWindow;
+
+    // 调试信息覆盖层（连点5下空白处显示）
+    private TextView tvDebugOverlay;
+    private boolean debugOverlayVisible = false;
+    private final android.os.Handler debugUpdateHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable debugUpdateRunnable;
+    private int debugTapCount = 0;
+    private long debugLastTapTime = 0;
+    private static final int DEBUG_TAP_COUNT = 5;
+    private static final long DEBUG_TAP_INTERVAL_MS = 800;  // 连续点击的最大间隔
+
     private Button btnStartRecord, btnExit, btnTakePhoto;
     private MultiCameraManager cameraManager;
 
@@ -1042,6 +1053,10 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         // 初始化录制状态显示
         tvRecordingStats = findViewById(R.id.tv_recording_stats);
         initRecordingStatsDisplay();
+
+        // 初始化调试信息覆盖层
+        tvDebugOverlay = findViewById(R.id.tv_debug_overlay);
+        initDebugOverlayTapDetection();
         
         // 更新摄像头标签（如果是自定义车型）
         updateCameraLabels();
@@ -3053,6 +3068,105 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         }
     }
 
+    // ==================== 调试信息覆盖层（连点5下显示） ====================
+
+    /**
+     * 在录制布局上检测连续5次点击，切换调试信息显示
+     */
+    private void initDebugOverlayTapDetection() {
+        if (recordingLayout == null) return;
+        recordingLayout.setOnTouchListener((v, event) -> {
+            if (event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+                long now = System.currentTimeMillis();
+                if (now - debugLastTapTime > DEBUG_TAP_INTERVAL_MS) {
+                    debugTapCount = 0;
+                }
+                debugTapCount++;
+                debugLastTapTime = now;
+                if (debugTapCount >= DEBUG_TAP_COUNT) {
+                    debugTapCount = 0;
+                    toggleDebugOverlay();
+                }
+            }
+            return false; // 不消费事件，让其他点击/触摸正常工作
+        });
+    }
+
+    private void toggleDebugOverlay() {
+        debugOverlayVisible = !debugOverlayVisible;
+        if (debugOverlayVisible) {
+            tvDebugOverlay.setVisibility(View.VISIBLE);
+            startDebugUpdates();
+            android.widget.Toast.makeText(this, "调试信息已开启", android.widget.Toast.LENGTH_SHORT).show();
+        } else {
+            tvDebugOverlay.setVisibility(View.GONE);
+            stopDebugUpdates();
+            android.widget.Toast.makeText(this, "调试信息已关闭", android.widget.Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void startDebugUpdates() {
+        stopDebugUpdates();
+        debugUpdateRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!debugOverlayVisible) return;
+                updateDebugInfo();
+                debugUpdateHandler.postDelayed(this, 1000);
+            }
+        };
+        debugUpdateHandler.post(debugUpdateRunnable);
+    }
+
+    private void stopDebugUpdates() {
+        if (debugUpdateRunnable != null) {
+            debugUpdateHandler.removeCallbacks(debugUpdateRunnable);
+            debugUpdateRunnable = null;
+        }
+    }
+
+    private void updateDebugInfo() {
+        if (tvDebugOverlay == null) return;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("── EVCam Debug ──\n");
+
+        // 摄像头 FPS 和分辨率
+        if (cameraManager != null) {
+            sb.append(cameraManager.getDebugStats());
+        } else {
+            sb.append("Camera: not initialized");
+        }
+
+        // 录制状态
+        sb.append("\n\n");
+        sb.append("录制: ").append(isRecording ? "● REC" : "○ 停止");
+        if (isRecording) {
+            sb.append("  模式: ").append(appConfig.getRecordingMode());
+        }
+
+        // 内存使用
+        Runtime rt = Runtime.getRuntime();
+        long usedMB = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
+        long totalMB = rt.maxMemory() / (1024 * 1024);
+        sb.append("\n");
+        sb.append("内存: ").append(usedMB).append("/").append(totalMB).append(" MB");
+
+        // 车型
+        sb.append("\n");
+        sb.append("车型: ").append(appConfig.getCarModel());
+        sb.append("  摄像头数: ").append(appConfig.getCameraCount());
+
+        // 版本
+        try {
+            String versionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            sb.append("\n");
+            sb.append("版本: ").append(versionName);
+        } catch (Exception ignored) {}
+
+        tvDebugOverlay.setText(sb.toString());
+    }
+
     /**
      * 检查是否需要在主题切换后恢复录制
      * 在摄像头初始化完成后调用，如果之前正在录制（非钉钉指令），则自动恢复录制
@@ -4702,6 +4816,9 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         // 关闭预览矫正悬浮窗
         dismissPreviewCorrectionFloating();
         
+        // 停止调试信息更新
+        stopDebugUpdates();
+        
         // 清除静态实例引用
         if (instance == this) {
             instance = null;
@@ -4861,8 +4978,12 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
             // 如果 Fragment 返回栈不为空（在二级菜单中），则返回上一级
             getSupportFragmentManager().popBackStack();
             AppLog.d(TAG, "Popped fragment back stack, returning to previous screen");
+        } else if (fragmentContainer != null && fragmentContainer.getVisibility() == View.VISIBLE) {
+            // 如果当前在非录制界面（Fragment界面），先返回录制界面
+            goToRecordingInterface();
+            AppLog.d(TAG, "Returned to recording interface via back button");
         } else {
-            // 按返回键时将应用移到后台，而不是关闭Activity
+            // 在录制界面，按返回键将应用移到后台，而不是关闭Activity
             // 这样下次打开应用时能快速恢复，无需重新创建Activity
             moveTaskToBack(true);
             AppLog.d(TAG, "Moved to background via back button");

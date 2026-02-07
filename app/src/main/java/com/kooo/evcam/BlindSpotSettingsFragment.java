@@ -264,7 +264,7 @@ public class BlindSpotSettingsFragment extends Fragment {
             String keyword = logFilterEditText.getText().toString().trim();
             if (keyword.isEmpty()) {
                 // 没有输入关键词时弹窗提示
-                new android.app.AlertDialog.Builder(requireContext())
+                new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext(), R.style.Theme_Cam_MaterialAlertDialog)
                     .setTitle("提示")
                     .setMessage("未输入过滤关键字，日志量可能很大，可能导致界面卡顿。\n\n建议输入关键字进行过滤，是否继续？")
                     .setPositiveButton("继续打开", (dialog, which) -> {

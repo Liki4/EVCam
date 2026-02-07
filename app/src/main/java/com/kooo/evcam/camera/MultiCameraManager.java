@@ -2055,6 +2055,29 @@ public class MultiCameraManager {
      * 获取所有摄像头当前使用的分辨率信息
      * @return 格式化的分辨率信息字符串
      */
+    /**
+     * 获取所有摄像头的实时调试信息（FPS + 分辨率）
+     */
+    public String getDebugStats() {
+        StringBuilder sb = new StringBuilder();
+        String[] order = {"front", "back", "left", "right"};
+        String[] labels = {"前", "后", "左", "右"};
+        for (int i = 0; i < order.length; i++) {
+            SingleCamera camera = cameras.get(order[i]);
+            if (camera == null) continue;
+            if (sb.length() > 0) sb.append("\n");
+            android.util.Size previewSize = camera.getPreviewSize();
+            String res = previewSize != null
+                    ? previewSize.getWidth() + "×" + previewSize.getHeight()
+                    : "-";
+            float fps = camera.getCurrentFps();
+            sb.append(labels[i]).append("(").append(camera.getCameraId()).append(") ");
+            sb.append(String.format(java.util.Locale.US, "%.1f fps  ", fps));
+            sb.append(res);
+        }
+        return sb.toString();
+    }
+
     public String getCameraResolutionsInfo() {
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<String, SingleCamera> entry : cameras.entrySet()) {

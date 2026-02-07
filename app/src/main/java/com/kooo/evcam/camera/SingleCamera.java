@@ -86,6 +86,11 @@ public class SingleCamera {
     private long lastFrameLogTime = 0;  // 上次输出帧计数的时间
     private static final long FRAME_LOG_INTERVAL_MS = 5000;  // 每5秒输出一次帧计数
 
+    // 实时 FPS（1秒滚动窗口，供调试信息展示）
+    private float currentFps = 0f;
+    private long fpsWindowFrameCount = 0;
+    private long fpsWindowStartTime = 0;
+
     private long lastFrameTimestampMs = 0;
     private long lastStallRecoveryMs = 0;
     private int stallRecoveryLevel = 0;
@@ -626,6 +631,13 @@ public class SingleCamera {
 
     public long getLastFrameTimestampMs() {
         return lastFrameTimestampMs;
+    }
+
+    /**
+     * 获取当前实时 FPS（1秒滚动窗口）
+     */
+    public float getCurrentFps() {
+        return currentFps;
     }
 
     /**
@@ -1255,6 +1267,16 @@ public class SingleCamera {
                                     readActualParamsFromResult(result);
                                     hasReadActualParams = true;
                                 }
+                                // 1秒滚动窗口 FPS
+                                fpsWindowFrameCount++;
+                                if (fpsWindowStartTime == 0) fpsWindowStartTime = now;
+                                long fpsElapsed = now - fpsWindowStartTime;
+                                if (fpsElapsed >= 1000) {
+                                    currentFps = fpsWindowFrameCount * 1000f / fpsElapsed;
+                                    fpsWindowFrameCount = 0;
+                                    fpsWindowStartTime = now;
+                                }
+                                // 5秒日志输出
                                 if (now - lastFrameLogTime >= FRAME_LOG_INTERVAL_MS) {
                                     long elapsed = now - lastFrameLogTime;
                                     float fps = frameCount * 1000f / elapsed;
