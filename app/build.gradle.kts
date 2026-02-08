@@ -21,7 +21,7 @@ android {
         minSdk = 28
         targetSdk = 36
         versionCode = 20
-        versionName = "1.0.7-test-02081226"
+        versionName = "1.0.7-test-02081447"
 
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -80,6 +80,10 @@ dependencies {
 
     // WorkManager 定时任务（用于保活）
     implementation("androidx.work:work-runtime:2.9.0")
+
+    // gRPC (VHAL 转向灯信号监听，连接 localhost:40004)
+    implementation("io.grpc:grpc-okhttp:1.62.2")
+    implementation("io.grpc:grpc-stub:1.62.2")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
