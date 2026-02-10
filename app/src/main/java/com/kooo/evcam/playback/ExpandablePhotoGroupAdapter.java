@@ -1,6 +1,8 @@
 package com.kooo.evcam.playback;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,13 +18,14 @@ import com.bumptech.glide.request.RequestOptions;
 import com.bumptech.glide.signature.ObjectKey;
 import com.kooo.evcam.AppConfig;
 import com.kooo.evcam.R;
-import com.kooo.evcam.playback.PanoramicCropTransformation;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 可展开的图片分组适配器
@@ -49,6 +52,10 @@ public class ExpandablePhotoGroupAdapter extends RecyclerView.Adapter<RecyclerVi
     private OnItemSelectedListener itemSelectedListener;
     private OnDateHeaderClickListener dateHeaderClickListener;
 
+    private static final ExecutorService thumbnailExecutor = Executors.newFixedThreadPool(2);
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final ThumbnailStorageManager thumbnailStorage;
+
     public interface OnItemClickListener {
         void onItemClick(PhotoGroup group, int position);
     }
@@ -64,6 +71,7 @@ public class ExpandablePhotoGroupAdapter extends RecyclerView.Adapter<RecyclerVi
     public ExpandablePhotoGroupAdapter(Context context, List<DateSection<PhotoGroup>> dateSections) {
         this.context = context;
         this.dateSections = dateSections;
+        this.thumbnailStorage = new ThumbnailStorageManager(context, thumbnailExecutor);
         buildFlattenedList();
     }
 
@@ -293,7 +301,7 @@ public class ExpandablePhotoGroupAdapter extends RecyclerView.Adapter<RecyclerVi
     }
     
     /**
-     * 从full照片裁切并加载指定方向的缩略图
+     * Load cropped photo thumbnail: read from stored file if valid, else lazy-generate then load with Glide.
      */
     private void loadCroppedThumbnail(File fullPhotoFile, ImageView imageView, String position) {
         if (fullPhotoFile == null || !fullPhotoFile.exists()) {
@@ -302,27 +310,56 @@ public class ExpandablePhotoGroupAdapter extends RecyclerView.Adapter<RecyclerVi
             return;
         }
 
-        // 获取裁切区域（归一化坐标）
         float[] cropRegion = AppConfig.getPanoramicCropRegion(position);
         if (cropRegion == null || cropRegion.length < 4) {
-            // 如果无法获取裁切区域，回退到正常加载
             loadThumbnail(fullPhotoFile, imageView);
             return;
         }
 
-        // 使用Glide的transform进行裁切
+        String loadKey = fullPhotoFile.getAbsolutePath() + "_" + position + "_" + fullPhotoFile.lastModified();
+        imageView.setTag(loadKey);
+
+        File thumbFile = ThumbnailStorageManager.getThumbnailFile(context, fullPhotoFile, position);
+        if (thumbFile != null && thumbFile.exists() && ThumbnailStorageManager.isThumbnailValid(fullPhotoFile, thumbFile)) {
+            loadThumbnailFromFile(thumbFile, imageView);
+            return;
+        }
+
+        thumbnailStorage.getOrCreatePhotoThumbnail(fullPhotoFile, position, new ThumbnailStorageManager.ThumbnailCallback() {
+            @Override
+            public void onThumbnailReady(File file) {
+                if (loadKey.equals(imageView.getTag())) {
+                    loadThumbnailFromFile(file, imageView);
+                }
+            }
+
+            @Override
+            public void onThumbnailFailed() {
+                if (loadKey.equals(imageView.getTag())) {
+                    imageView.setImageDrawable(null);
+                    imageView.setBackgroundColor(0xFF1A1A1A);
+                }
+            }
+        });
+    }
+
+    private void loadThumbnailFromFile(File thumbFile, ImageView imageView) {
+        if (thumbFile == null || !thumbFile.exists()) {
+            imageView.setImageDrawable(null);
+            imageView.setBackgroundColor(0xFF1A1A1A);
+            return;
+        }
         RequestOptions options = new RequestOptions()
                 .centerCrop()
                 .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
-                .signature(new ObjectKey(fullPhotoFile.lastModified()))
+                .signature(new ObjectKey(thumbFile.lastModified()))
                 .placeholder(android.R.color.black)
-                .error(android.R.color.black)
-                .transform(new PanoramicCropTransformation(cropRegion));
-
+                .error(android.R.color.black);
         Glide.with(context)
-                .load(fullPhotoFile)
+                .load(thumbFile)
                 .apply(options)
                 .into(imageView);
+        imageView.setBackgroundColor(0);
     }
 
     @Override

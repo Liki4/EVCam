@@ -1,8 +1,6 @@
 package com.kooo.evcam.playback;
 
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.media.MediaMetadataRetriever;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.LayoutInflater;
@@ -54,9 +52,9 @@ public class ExpandableVideoGroupAdapter extends RecyclerView.Adapter<RecyclerVi
     private OnItemSelectedListener itemSelectedListener;
     private OnDateHeaderClickListener dateHeaderClickListener;
 
-    private static final int THUMB_MAX_SIZE_PX = 200;
     private static final ExecutorService thumbnailExecutor = Executors.newFixedThreadPool(2);
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final ThumbnailStorageManager thumbnailStorage;
 
     public interface OnItemClickListener {
         void onItemClick(VideoGroup group, int position);
@@ -73,6 +71,7 @@ public class ExpandableVideoGroupAdapter extends RecyclerView.Adapter<RecyclerVi
     public ExpandableVideoGroupAdapter(Context context, List<DateSection<VideoGroup>> dateSections) {
         this.context = context;
         this.dateSections = dateSections;
+        this.thumbnailStorage = new ThumbnailStorageManager(context, thumbnailExecutor);
         buildFlattenedList();
     }
 
@@ -302,7 +301,7 @@ public class ExpandableVideoGroupAdapter extends RecyclerView.Adapter<RecyclerVi
     }
 
     /**
-     * 从 full 视频取首帧并按指定方向裁切后显示为缩略图（领克07+全景）
+     * Load cropped video thumbnail: read from stored file if valid, else lazy-generate then load with Glide.
      */
     private void loadCroppedVideoThumbnail(File fullVideoFile, ImageView imageView, String position) {
         if (fullVideoFile == null || !fullVideoFile.exists() || imageView == null) {
@@ -322,87 +321,47 @@ public class ExpandableVideoGroupAdapter extends RecyclerView.Adapter<RecyclerVi
         String loadKey = fullVideoFile.getAbsolutePath() + "_" + position + "_" + fullVideoFile.lastModified();
         imageView.setTag(loadKey);
 
-        thumbnailExecutor.execute(() -> {
-            MediaMetadataRetriever retriever = null;
-            Bitmap fullFrame = null;
-            try {
-                retriever = new MediaMetadataRetriever();
-                retriever.setDataSource(fullVideoFile.getAbsolutePath());
-                fullFrame = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
-            } catch (Exception e) {
-                // ignore
-            } finally {
-                if (retriever != null) {
-                    try {
-                        retriever.release();
-                    } catch (Exception ignored) {}
-                }
-            }
+        File thumbFile = ThumbnailStorageManager.getThumbnailFile(context, fullVideoFile, position);
+        if (thumbFile != null && thumbFile.exists() && ThumbnailStorageManager.isThumbnailValid(fullVideoFile, thumbFile)) {
+            loadThumbnailFromFile(thumbFile, imageView);
+            return;
+        }
 
-            if (fullFrame == null) {
-                mainHandler.post(() -> {
-                    if (loadKey.equals(imageView.getTag())) {
-                        imageView.setImageDrawable(null);
-                        imageView.setBackgroundColor(0xFF1A1A1A);
-                    }
-                });
-                return;
-            }
-
-            int w = fullFrame.getWidth();
-            int h = fullFrame.getHeight();
-            int cropX = (int) (cropRegion[0] * w);
-            int cropY = (int) (cropRegion[1] * h);
-            int cropW = (int) (cropRegion[2] * w);
-            int cropH = (int) (cropRegion[3] * h);
-
-            cropX = Math.max(0, Math.min(cropX, w - 1));
-            cropY = Math.max(0, Math.min(cropY, h - 1));
-            cropW = Math.max(1, Math.min(cropW, w - cropX));
-            cropH = Math.max(1, Math.min(cropH, h - cropY));
-
-            Bitmap cropped = null;
-            try {
-                cropped = Bitmap.createBitmap(fullFrame, cropX, cropY, cropW, cropH);
-            } catch (Exception e) {
-                cropped = null;
-            }
-            if (fullFrame != null && fullFrame != cropped) {
-                fullFrame.recycle();
-            }
-            if (cropped == null) {
-                return;
-            }
-
-            Bitmap thumb = cropped;
-            if (cropped.getWidth() > THUMB_MAX_SIZE_PX || cropped.getHeight() > THUMB_MAX_SIZE_PX) {
-                int tw = cropped.getWidth();
-                int th = cropped.getHeight();
-                if (tw > th) {
-                    th = th * THUMB_MAX_SIZE_PX / tw;
-                    tw = THUMB_MAX_SIZE_PX;
-                } else {
-                    tw = tw * THUMB_MAX_SIZE_PX / th;
-                    th = THUMB_MAX_SIZE_PX;
-                }
-                thumb = Bitmap.createScaledBitmap(cropped, tw, th, true);
-                if (thumb != cropped) {
-                    cropped.recycle();
-                }
-            }
-
-            final Bitmap finalThumb = thumb;
-            mainHandler.post(() -> {
+        thumbnailStorage.getOrCreateVideoThumbnail(fullVideoFile, position, new ThumbnailStorageManager.ThumbnailCallback() {
+            @Override
+            public void onThumbnailReady(File file) {
                 if (loadKey.equals(imageView.getTag())) {
-                    imageView.setImageBitmap(finalThumb);
-                    imageView.setBackgroundColor(0);
-                } else {
-                    if (finalThumb != null && !finalThumb.isRecycled()) {
-                        finalThumb.recycle();
-                    }
+                    loadThumbnailFromFile(file, imageView);
                 }
-            });
+            }
+
+            @Override
+            public void onThumbnailFailed() {
+                if (loadKey.equals(imageView.getTag())) {
+                    imageView.setImageDrawable(null);
+                    imageView.setBackgroundColor(0xFF1A1A1A);
+                }
+            }
         });
+    }
+
+    private void loadThumbnailFromFile(File thumbFile, ImageView imageView) {
+        if (thumbFile == null || !thumbFile.exists()) {
+            imageView.setImageDrawable(null);
+            imageView.setBackgroundColor(0xFF1A1A1A);
+            return;
+        }
+        RequestOptions options = new RequestOptions()
+                .centerCrop()
+                .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
+                .signature(new ObjectKey(thumbFile.lastModified()))
+                .placeholder(android.R.color.black)
+                .error(android.R.color.black);
+        Glide.with(context)
+                .load(thumbFile)
+                .apply(options)
+                .into(imageView);
+        imageView.setBackgroundColor(0);
     }
 
     @Override

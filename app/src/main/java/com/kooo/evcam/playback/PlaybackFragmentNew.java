@@ -102,6 +102,12 @@ public class PlaybackFragmentNew extends Fragment {
         return view;
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        ThumbnailStorageManager.runCleanup(requireContext());
+    }
+
     private void initViews(View view) {
         // 工具栏
         toolbar = view.findViewById(R.id.toolbar);
