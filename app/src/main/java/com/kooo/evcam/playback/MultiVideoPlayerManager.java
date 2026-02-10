@@ -184,7 +184,7 @@ public class MultiVideoPlayerManager {
             mediaPlayer.setDataSource(context, uri);
             
             // 设置Surface
-            textureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+            TextureView.SurfaceTextureListener listener = new TextureView.SurfaceTextureListener() {
                 @Override
                 public void onSurfaceTextureAvailable(android.graphics.SurfaceTexture surface, int width, int height) {
                     try {
@@ -197,8 +197,6 @@ public class MultiVideoPlayerManager {
 
                 @Override
                 public void onSurfaceTextureSizeChanged(android.graphics.SurfaceTexture surface, int width, int height) {
-                    // 应用裁切变换（如果是领克07模式）
-                    // 延迟应用，确保MediaPlayer已准备好
                     handler.postDelayed(() -> {
                         applyCropTransformIfNeeded(position, textureView, mediaPlayer);
                     }, 100);
@@ -212,7 +210,21 @@ public class MultiVideoPlayerManager {
                 @Override
                 public void onSurfaceTextureUpdated(android.graphics.SurfaceTexture surface) {
                 }
-            });
+            };
+            textureView.setSurfaceTextureListener(listener);
+
+            // 若 Surface 已可用（如切换视频时复用 View），立即绑定，否则不会再次回调 onSurfaceTextureAvailable
+            if (textureView.isAvailable()) {
+                android.graphics.SurfaceTexture st = textureView.getSurfaceTexture();
+                if (st != null) {
+                    try {
+                        mediaPlayer.setSurface(new Surface(st));
+                        mediaPlayer.prepareAsync();
+                    } catch (Exception e) {
+                        Log.e(TAG, "Failed to set surface (already available) for " + position, e);
+                    }
+                }
+            }
 
             mediaPlayer.setOnPreparedListener(mp -> {
                 Log.d(TAG, "Video prepared: " + position);
@@ -253,6 +265,22 @@ public class MultiVideoPlayerManager {
             mediaPlayer.setOnErrorListener((mp, what, extra) -> {
                 Log.e(TAG, "Video error: " + position + ", what=" + what + ", extra=" + extra);
                 return true;
+            });
+
+            // 视频尺寸已知时设置 Surface 缓冲大小并应用裁切（部分设备 onPrepared 时 getVideoWidth/Height 仍为 0）
+            mediaPlayer.setOnVideoSizeChangedListener((mp, width, height) -> {
+                if (width <= 0 || height <= 0) return;
+                android.graphics.SurfaceTexture st = textureView.getSurfaceTexture();
+                if (st != null) {
+                    try {
+                        st.setDefaultBufferSize(width, height);
+                    } catch (Exception e) {
+                        Log.w(TAG, "setDefaultBufferSize failed for " + position, e);
+                    }
+                }
+                handler.postDelayed(() -> {
+                    applyCropTransformIfNeeded(position, textureView, mp);
+                }, 50);
             });
 
         } catch (Exception e) {
@@ -303,12 +331,11 @@ public class MultiVideoPlayerManager {
             return;
         }
         
-        // 应用变换（参考SingleCamera.applyPanoramicCropTransformToView）
+        // 应用变换：TextureView.setTransform 的 Matrix 作用在纹理的归一化坐标系 (0,0)-(1,1)
+        // 将裁切区域 [cropX, cropY, cropW, cropH] 映射为满屏，即 scale=1/cropW, 1/cropH，再平移使 (cropX,cropY)->(0,0)
         textureView.post(() -> {
             int viewWidth = textureView.getWidth();
             int viewHeight = textureView.getHeight();
-            
-            // 如果View尺寸未获取到，延迟重试（最多3次）
             if (viewWidth == 0 || viewHeight == 0) {
                 if (retryCount < 3) {
                     handler.postDelayed(() -> {
@@ -317,28 +344,27 @@ public class MultiVideoPlayerManager {
                 }
                 return;
             }
-            
-            // 计算裁切区域像素坐标
-            float cropX = cropRegion[0] * videoWidth;
-            float cropY = cropRegion[1] * videoHeight;
-            float cropW = cropRegion[2] * videoWidth;
-            float cropH = cropRegion[3] * videoHeight;
-            
-            // 计算缩放和平移
+
+            float cropX = cropRegion[0];
+            float cropY = cropRegion[1];
+            float cropW = cropRegion[2];
+            float cropH = cropRegion[3];
+            if (cropW <= 0 || cropH <= 0) {
+                return;
+            }
+            float scaleX = 1f / cropW;
+            float scaleY = 1f / cropH;
+            float translateX = -cropX * scaleX * viewWidth;
+            float translateY = -cropY * scaleY * viewHeight;
+
             android.graphics.Matrix matrix = new android.graphics.Matrix();
-            float scaleX = viewWidth / cropW;
-            float scaleY = viewHeight / cropH;
-            float translateX = -cropX * scaleX;
-            float translateY = -cropY * scaleY;
-            
             matrix.setScale(scaleX, scaleY);
             matrix.postTranslate(translateX, translateY);
-            
             textureView.setTransform(matrix);
-            
-            Log.d(TAG, position + " applied crop transform: view=" + viewWidth + "x" + viewHeight +
-                    ", video=" + videoWidth + "x" + videoHeight +
-                    ", cropRegion=[" + cropRegion[0] + "," + cropRegion[1] + "," + cropRegion[2] + "," + cropRegion[3] + "]");
+
+            Log.d(TAG, position + " applied crop transform (normalized): view=" + viewWidth + "x" + viewHeight +
+                    ", cropRegion=[" + cropRegion[0] + "," + cropRegion[1] + "," + cropRegion[2] + "," + cropRegion[3] + "]" +
+                    ", scale=" + scaleX + "," + scaleY + ", mediaPlayer=" + mediaPlayer.hashCode() + ", textureView=" + textureView.hashCode());
         });
     }
 

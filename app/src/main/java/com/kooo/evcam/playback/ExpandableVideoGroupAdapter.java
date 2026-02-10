@@ -1,6 +1,10 @@
 package com.kooo.evcam.playback;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.media.MediaMetadataRetriever;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,6 +18,7 @@ import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.request.RequestOptions;
 import com.bumptech.glide.signature.ObjectKey;
+import com.kooo.evcam.AppConfig;
 import com.kooo.evcam.R;
 
 import java.io.File;
@@ -21,6 +26,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 可展开的视频分组适配器
@@ -46,6 +53,10 @@ public class ExpandableVideoGroupAdapter extends RecyclerView.Adapter<RecyclerVi
     private OnItemClickListener itemClickListener;
     private OnItemSelectedListener itemSelectedListener;
     private OnDateHeaderClickListener dateHeaderClickListener;
+
+    private static final int THUMB_MAX_SIZE_PX = 200;
+    private static final ExecutorService thumbnailExecutor = Executors.newFixedThreadPool(2);
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     public interface OnItemClickListener {
         void onItemClick(VideoGroup group, int position);
@@ -209,10 +220,22 @@ public class ExpandableVideoGroupAdapter extends RecyclerView.Adapter<RecyclerVi
         holder.videoCountBadge.setText(count + "路");
 
         // 加载四个位置的缩略图
-        loadThumbnail(group.getFrontVideo(), holder.thumbFront);
-        loadThumbnail(group.getBackVideo(), holder.thumbBack);
-        loadThumbnail(group.getLeftVideo(), holder.thumbLeft);
-        loadThumbnail(group.getRightVideo(), holder.thumbRight);
+        // 领克07+全景：仅有 full 时，从 full 视频按四个方向裁切显示不同缩略图
+        AppConfig appConfig = new AppConfig(context);
+        boolean isLynkco07 = AppConfig.CAR_MODEL_LYNKCO_07.equals(appConfig.getCarModel());
+        boolean hasFull = group.hasVideo(VideoGroup.POSITION_FULL);
+        if (isLynkco07 && hasFull) {
+            File fullVideo = group.getFullVideo();
+            loadCroppedVideoThumbnail(fullVideo, holder.thumbFront, VideoGroup.POSITION_FRONT);
+            loadCroppedVideoThumbnail(fullVideo, holder.thumbBack, VideoGroup.POSITION_BACK);
+            loadCroppedVideoThumbnail(fullVideo, holder.thumbLeft, VideoGroup.POSITION_LEFT);
+            loadCroppedVideoThumbnail(fullVideo, holder.thumbRight, VideoGroup.POSITION_RIGHT);
+        } else {
+            loadThumbnail(group.getFrontVideo(), holder.thumbFront);
+            loadThumbnail(group.getBackVideo(), holder.thumbBack);
+            loadThumbnail(group.getLeftVideo(), holder.thumbLeft);
+            loadThumbnail(group.getRightVideo(), holder.thumbRight);
+        }
 
         // 选中状态样式
         boolean isSelected = selectedGroups.contains(group);
@@ -276,6 +299,110 @@ public class ExpandableVideoGroupAdapter extends RecyclerView.Adapter<RecyclerVi
                 .load(videoFile)
                 .apply(options)
                 .into(imageView);
+    }
+
+    /**
+     * 从 full 视频取首帧并按指定方向裁切后显示为缩略图（领克07+全景）
+     */
+    private void loadCroppedVideoThumbnail(File fullVideoFile, ImageView imageView, String position) {
+        if (fullVideoFile == null || !fullVideoFile.exists() || imageView == null) {
+            if (imageView != null) {
+                imageView.setImageDrawable(null);
+                imageView.setBackgroundColor(0xFF1A1A1A);
+            }
+            return;
+        }
+
+        float[] cropRegion = AppConfig.getPanoramicCropRegion(position);
+        if (cropRegion == null || cropRegion.length < 4) {
+            loadThumbnail(fullVideoFile, imageView);
+            return;
+        }
+
+        String loadKey = fullVideoFile.getAbsolutePath() + "_" + position + "_" + fullVideoFile.lastModified();
+        imageView.setTag(loadKey);
+
+        thumbnailExecutor.execute(() -> {
+            MediaMetadataRetriever retriever = null;
+            Bitmap fullFrame = null;
+            try {
+                retriever = new MediaMetadataRetriever();
+                retriever.setDataSource(fullVideoFile.getAbsolutePath());
+                fullFrame = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+            } catch (Exception e) {
+                // ignore
+            } finally {
+                if (retriever != null) {
+                    try {
+                        retriever.release();
+                    } catch (Exception ignored) {}
+                }
+            }
+
+            if (fullFrame == null) {
+                mainHandler.post(() -> {
+                    if (loadKey.equals(imageView.getTag())) {
+                        imageView.setImageDrawable(null);
+                        imageView.setBackgroundColor(0xFF1A1A1A);
+                    }
+                });
+                return;
+            }
+
+            int w = fullFrame.getWidth();
+            int h = fullFrame.getHeight();
+            int cropX = (int) (cropRegion[0] * w);
+            int cropY = (int) (cropRegion[1] * h);
+            int cropW = (int) (cropRegion[2] * w);
+            int cropH = (int) (cropRegion[3] * h);
+
+            cropX = Math.max(0, Math.min(cropX, w - 1));
+            cropY = Math.max(0, Math.min(cropY, h - 1));
+            cropW = Math.max(1, Math.min(cropW, w - cropX));
+            cropH = Math.max(1, Math.min(cropH, h - cropY));
+
+            Bitmap cropped = null;
+            try {
+                cropped = Bitmap.createBitmap(fullFrame, cropX, cropY, cropW, cropH);
+            } catch (Exception e) {
+                cropped = null;
+            }
+            if (fullFrame != null && fullFrame != cropped) {
+                fullFrame.recycle();
+            }
+            if (cropped == null) {
+                return;
+            }
+
+            Bitmap thumb = cropped;
+            if (cropped.getWidth() > THUMB_MAX_SIZE_PX || cropped.getHeight() > THUMB_MAX_SIZE_PX) {
+                int tw = cropped.getWidth();
+                int th = cropped.getHeight();
+                if (tw > th) {
+                    th = th * THUMB_MAX_SIZE_PX / tw;
+                    tw = THUMB_MAX_SIZE_PX;
+                } else {
+                    tw = tw * THUMB_MAX_SIZE_PX / th;
+                    th = THUMB_MAX_SIZE_PX;
+                }
+                thumb = Bitmap.createScaledBitmap(cropped, tw, th, true);
+                if (thumb != cropped) {
+                    cropped.recycle();
+                }
+            }
+
+            final Bitmap finalThumb = thumb;
+            mainHandler.post(() -> {
+                if (loadKey.equals(imageView.getTag())) {
+                    imageView.setImageBitmap(finalThumb);
+                    imageView.setBackgroundColor(0);
+                } else {
+                    if (finalThumb != null && !finalThumb.isRecycled()) {
+                        finalThumb.recycle();
+                    }
+                }
+            });
+        });
     }
 
     @Override

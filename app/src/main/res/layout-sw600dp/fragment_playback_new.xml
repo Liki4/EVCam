@@ -5,7 +5,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/page_background">
+    android:background="@color/page_background"
+    android:tag="layout-sw600dp">
 
     <!-- 顶部工具栏 -->
     <LinearLayout
@@ -225,7 +226,7 @@
                                 android:layout_margin="5dp"
                                 android:background="@color/preview_frame_background">
 
-                            <VideoView
+                            <TextureView
                                 android:id="@+id/video_front"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
@@ -265,7 +266,7 @@
                                 android:layout_margin="5dp"
                                 android:background="@color/preview_frame_background">
 
-                            <VideoView
+                            <TextureView
                                 android:id="@+id/video_back"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
@@ -314,7 +315,7 @@
                                 android:layout_margin="5dp"
                                 android:background="@color/preview_frame_background">
 
-                            <VideoView
+                            <TextureView
                                 android:id="@+id/video_left"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
@@ -353,7 +354,7 @@
                                 android:layout_margin="5dp"
                                 android:background="@color/preview_frame_background">
 
-                            <VideoView
+                            <TextureView
                                 android:id="@+id/video_right"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
@@ -393,7 +394,7 @@
                     android:visibility="gone"
                     android:background="@color/preview_frame_background">
 
-                    <VideoView
+                    <TextureView
                         android:id="@+id/video_single"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"

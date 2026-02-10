@@ -3534,7 +3534,11 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
         android.content.IntentFilter filter = new android.content.IntentFilter();
         filter.addAction(android.content.Intent.ACTION_SCREEN_OFF);
         filter.addAction(android.content.Intent.ACTION_SCREEN_ON);
-        registerReceiver(screenStateReceiver, filter);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(screenStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(screenStateReceiver, filter);
+        }
         
         AppLog.d(TAG, "息屏状态广播接收器已注册");
 
@@ -3562,7 +3566,12 @@ public class MainActivity extends AppCompatActivity implements WechatRemoteManag
 
         android.content.IntentFilter filter = new android.content.IntentFilter();
         filter.addAction(WakeUpHelper.ACTION_MOVE_TO_BACKGROUND);
-        registerReceiver(backgroundCommandReceiver, filter);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(backgroundCommandReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(backgroundCommandReceiver, filter);
+        }
 
         AppLog.d(TAG, "后台切换广播接收器已注册");
     }

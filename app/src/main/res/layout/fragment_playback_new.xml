@@ -5,7 +5,9 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/page_background">
+    android:background="@color/page_background"
+    android:tag="layout">
+
 
     <!-- 顶部工具栏 -->
     <LinearLayout

@@ -26,6 +26,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import android.widget.PopupMenu;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.kooo.evcam.AppConfig;
 import com.kooo.evcam.MainActivity;
 import com.kooo.evcam.R;
 import com.kooo.evcam.StorageHelper;
@@ -81,7 +82,7 @@ public class PlaybackFragmentNew extends Fragment {
     // 状态
     private boolean isMultiSelectMode = false;
     private boolean isSingleMode = false;
-    private String currentSinglePosition = VideoGroup.POSITION_FRONT;
+    private String currentSinglePosition = VideoGroup.POSITION_FULL;
     private boolean isDraggingSeekBar = false;
 
     @Nullable
@@ -572,12 +573,20 @@ public class PlaybackFragmentNew extends Fragment {
      */
     /**
      * 更新占位符显示（无视频时显示）
+     * 领克07+全景：仅有 full 时，四宫格由 full 裁切显示，故四个格子都显示 TextureView
      */
     private void updatePlaceholders(VideoGroup group) {
-        boolean hasFront = group.hasVideo(VideoGroup.POSITION_FRONT);
-        boolean hasBack = group.hasVideo(VideoGroup.POSITION_BACK);
-        boolean hasLeft = group.hasVideo(VideoGroup.POSITION_LEFT);
-        boolean hasRight = group.hasVideo(VideoGroup.POSITION_RIGHT);
+        boolean hasFull = group.hasVideo(VideoGroup.POSITION_FULL);
+        boolean isLynkco07 = false;
+        if (getContext() != null) {
+            AppConfig appConfig = new AppConfig(getContext());
+            isLynkco07 = AppConfig.CAR_MODEL_LYNKCO_07.equals(appConfig.getCarModel());
+        }
+        // 领克07+全景：只有 full 时也按“四路都有”处理，由 MultiVideoPlayerManager 从 full 裁切
+        boolean hasFront = group.hasVideo(VideoGroup.POSITION_FRONT) || (isLynkco07 && hasFull);
+        boolean hasBack = group.hasVideo(VideoGroup.POSITION_BACK) || (isLynkco07 && hasFull);
+        boolean hasLeft = group.hasVideo(VideoGroup.POSITION_LEFT) || (isLynkco07 && hasFull);
+        boolean hasRight = group.hasVideo(VideoGroup.POSITION_RIGHT) || (isLynkco07 && hasFull);
 
         videoFront.setVisibility(hasFront ? View.VISIBLE : View.GONE);
         placeholderFront.setVisibility(hasFront ? View.GONE : View.VISIBLE);
