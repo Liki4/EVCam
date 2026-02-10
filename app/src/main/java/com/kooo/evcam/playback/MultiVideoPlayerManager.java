@@ -11,10 +11,9 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.view.Choreographer;
 import android.view.Surface;
 import android.view.TextureView;
-import android.view.TextureView;
-import android.view.Surface;
 
 import com.kooo.evcam.AppConfig;
 
@@ -72,6 +71,12 @@ public class MultiVideoPlayerManager {
     private int pendingSeekCount = 0;  // 待完成的seek操作数
     private int completedSeekCount = 0;  // 已完成的seek操作数
     private Runnable pendingSeekCallback = null;  // seek完成后的回调
+
+    /** 多路播放同步：位置差超过此阈值时进行 seek 对齐（毫秒） */
+    private static final int SYNC_THRESHOLD_MS = 200;
+    /** 多路播放同步：两次同步的最小间隔（毫秒），避免频繁 seek */
+    private static final long SYNC_INTERVAL_MS = 1000;
+    private long lastSyncTime = 0;
 
     /** 播放状态监听器 */
     private OnPlaybackListener playbackListener;
@@ -418,16 +423,17 @@ public class MultiVideoPlayerManager {
                 singleMp.start();
             }
         } else {
-            // 多路模式播放所有
+            // 多路模式：在下一帧回调中同时 start，减小起步时间差
             MediaPlayer frontMp = textureMediaPlayers.get(VideoGroup.POSITION_FRONT);
             MediaPlayer backMp = textureMediaPlayers.get(VideoGroup.POSITION_BACK);
             MediaPlayer leftMp = textureMediaPlayers.get(VideoGroup.POSITION_LEFT);
             MediaPlayer rightMp = textureMediaPlayers.get(VideoGroup.POSITION_RIGHT);
-            
-            if (frontMp != null) frontMp.start();
-            if (backMp != null) backMp.start();
-            if (leftMp != null) leftMp.start();
-            if (rightMp != null) rightMp.start();
+            Choreographer.getInstance().postFrameCallback(frameTimeNanos -> {
+                if (frontMp != null) frontMp.start();
+                if (backMp != null) backMp.start();
+                if (leftMp != null) leftMp.start();
+                if (rightMp != null) rightMp.start();
+            });
         }
 
         if (playbackListener != null) {
@@ -910,21 +916,61 @@ public class MultiVideoPlayerManager {
     }
 
     /**
-     * 开始进度更新
+     * 开始进度更新（含多路模式下周期性 seek 同步，减轻漂移与撕裂感）
      */
     private void startProgressUpdate() {
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                if (isPlaying && playbackListener != null) {
+                if (!isPlaying) return;
+                if (playbackListener != null) {
                     int position = getCurrentPosition();
                     playbackListener.onProgressUpdate(position);
+                }
+                if (!isSingleMode && pendingSeekCount == 0
+                        && System.currentTimeMillis() - lastSyncTime >= SYNC_INTERVAL_MS) {
+                    syncMultiViewToMaster();
+                    lastSyncTime = System.currentTimeMillis();
                 }
                 if (isPlaying) {
                     handler.postDelayed(this, 200);
                 }
             }
         }, 200);
+    }
+
+    /**
+     * 以一路为主（front），将其它路与主路位置差超过阈值的 seek 到主路，减轻四宫格漂移。
+     */
+    private void syncMultiViewToMaster() {
+        MediaPlayer masterMp = textureMediaPlayers.get(VideoGroup.POSITION_FRONT);
+        if (masterMp == null) {
+            for (String pos : new String[]{VideoGroup.POSITION_BACK, VideoGroup.POSITION_LEFT, VideoGroup.POSITION_RIGHT}) {
+                if (textureMediaPlayers.get(pos) != null) {
+                    masterMp = textureMediaPlayers.get(pos);
+                    break;
+                }
+            }
+        }
+        if (masterMp == null) return;
+        int masterPos;
+        try {
+            masterPos = masterMp.getCurrentPosition();
+            if (masterPos < 0) return;
+        } catch (Exception e) {
+            return;
+        }
+        for (String position : new String[]{VideoGroup.POSITION_FRONT, VideoGroup.POSITION_BACK, VideoGroup.POSITION_LEFT, VideoGroup.POSITION_RIGHT}) {
+            MediaPlayer mp = textureMediaPlayers.get(position);
+            if (mp == null || mp == masterMp) continue;
+            try {
+                int pos = mp.getCurrentPosition();
+                if (pos >= 0 && Math.abs(pos - masterPos) > SYNC_THRESHOLD_MS) {
+                    mp.seekTo(masterPos);
+                }
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     /**
