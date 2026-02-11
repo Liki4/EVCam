@@ -441,7 +441,8 @@
                         android:text="前"
                         android:textColor="@color/text_primary"
                         android:textSize="14sp"
-                        android:checked="true" />
+                        android:checked="true"
+                        android:visibility="gone" />
 
                     <CheckBox
                         android:id="@+id/cb_record_camera_back"

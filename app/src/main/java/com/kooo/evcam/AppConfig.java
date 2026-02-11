@@ -941,6 +941,8 @@ public class AppConfig {
         
         // 默认名称（适用于大多数预设车型）
         switch (position) {
+            case "full":
+                return "全景";
             case "front":
                 return "前";
             case "back":

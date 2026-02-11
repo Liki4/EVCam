@@ -1103,14 +1103,13 @@ public class SettingsFragment extends Fragment {
         // 根据摄像头数量显示/隐藏对应的 CheckBox
         int cameraCount = appConfig.getCameraCount();
 
-        // 前摄像头（领克）
-        cbRecordCameraFront.setVisibility((cameraCount == 1) && (isLinkCo) ? View.VISIBLE : View.GONE);
-        cbRecordCameraFront.setText(appConfig.getRecordingCameraDisplayName("full", 1));
-        cbRecordCameraFront.setChecked(appConfig.isRecordingCameraEnabled("full"));
+        // 全景摄像头（领克）
+        cbRecordCameraFull.setVisibility((cameraCount == 1) && (isLinkCo) ? View.VISIBLE : View.GONE);
+        cbRecordCameraFull.setText(appConfig.getRecordingCameraDisplayName("full", 1));
+        cbRecordCameraFull.setChecked(appConfig.isRecordingCameraEnabled("full"));
         
         // 前摄像头（1摄及以上都有）
         cbRecordCameraFront.setVisibility((cameraCount >= 1) && (!isLinkCo) ? View.VISIBLE : View.GONE);
-        cbRecordCameraFront.setVisibility(cameraCount >= 1 ? View.VISIBLE : View.GONE);
         cbRecordCameraFront.setText(appConfig.getRecordingCameraDisplayName("front", 1));
         cbRecordCameraFront.setChecked(appConfig.isRecordingCameraEnabled("front"));
         
@@ -1152,7 +1151,8 @@ public class SettingsFragment extends Fragment {
                 Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
             }
         };
-        
+
+        cbRecordCameraFull.setOnCheckedChangeListener(listener);
         cbRecordCameraFront.setOnCheckedChangeListener(listener);
         cbRecordCameraBack.setOnCheckedChangeListener(listener);
         cbRecordCameraLeft.setOnCheckedChangeListener(listener);
@@ -1168,17 +1168,22 @@ public class SettingsFragment extends Fragment {
      * 更新录制摄像头选择的 UI（车型切换时调用）
      */
     private void updateRecordingCameraSelectionUI() {
-        if (cbRecordCameraFront == null || getContext() == null || appConfig == null) {
+        boolean isLinkCo = AppConfig.CAR_MODEL_LYNKCO_07.equals(appConfig.getCarModel());
+        if ((!isLinkCo && cbRecordCameraFront == null) || (isLinkCo && cbRecordCameraFull == null) || getContext() == null || appConfig == null) {
             return;
         }
         
         isInitializingRecordingCameraSelection = true;
-        
+
         // 根据摄像头数量显示/隐藏对应的 CheckBox
         int cameraCount = appConfig.getCameraCount();
-        
+        // 全景摄像头（领克）
+        cbRecordCameraFull.setVisibility((cameraCount == 1) && (isLinkCo) ? View.VISIBLE : View.GONE);
+        cbRecordCameraFull.setText(appConfig.getRecordingCameraDisplayName("full", 1));
+        cbRecordCameraFull.setChecked(appConfig.isRecordingCameraEnabled("full"));
+
         // 前摄像头（1摄及以上都有）
-        cbRecordCameraFront.setVisibility(cameraCount >= 1 ? View.VISIBLE : View.GONE);
+        cbRecordCameraFront.setVisibility((cameraCount >= 1) && (!isLinkCo) ? View.VISIBLE : View.GONE);
         cbRecordCameraFront.setText(appConfig.getRecordingCameraDisplayName("front", 1));
         cbRecordCameraFront.setChecked(appConfig.isRecordingCameraEnabled("front"));
         
@@ -1207,6 +1212,9 @@ public class SettingsFragment extends Fragment {
      * 检查除了当前按钮外，是否还有至少一个摄像头被勾选
      */
     private boolean hasAtLeastOneRecordingCameraEnabled(View excludeButton) {
+        if (cbRecordCameraFull != excludeButton && cbRecordCameraFull.getVisibility() == View.VISIBLE && cbRecordCameraFull.isChecked()) {
+            return true;
+        }
         if (cbRecordCameraFront != excludeButton && cbRecordCameraFront.getVisibility() == View.VISIBLE && cbRecordCameraFront.isChecked()) {
             return true;
         }
@@ -1226,7 +1234,9 @@ public class SettingsFragment extends Fragment {
      * 根据 CheckBox 获取对应的摄像头位置
      */
     private String getPositionFromCheckBox(View checkBox) {
-        if (checkBox == cbRecordCameraFront) {
+        if (checkBox == cbRecordCameraFull) {
+            return "full";
+        } else if (checkBox == cbRecordCameraFront) {
             return "front";
         } else if (checkBox == cbRecordCameraBack) {
             return "back";
