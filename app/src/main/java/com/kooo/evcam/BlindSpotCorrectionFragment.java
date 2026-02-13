@@ -18,11 +18,11 @@ import androidx.fragment.app.Fragment;
 
 public class BlindSpotCorrectionFragment extends Fragment {
     private static final float SCALE_MIN = 0.10f;
-    private static final float SCALE_MAX = 8.00f;
+    private static final float SCALE_MAX = 3.00f;
     private static final float SCALE_STEP = 0.01f;
 
-    private static final float TRANSLATE_MIN = -5.00f;
-    private static final float TRANSLATE_MAX = 5.00f;
+    private static final float TRANSLATE_MIN = -1.00f;
+    private static final float TRANSLATE_MAX = 1.00f;
     private static final float TRANSLATE_STEP = 0.01f;
 
     private Button backButton;

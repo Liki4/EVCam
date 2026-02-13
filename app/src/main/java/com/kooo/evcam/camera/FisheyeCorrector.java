@@ -18,6 +18,9 @@ import com.kooo.evcam.AppLog;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * 鱼眼矫正器
@@ -25,9 +28,10 @@ import java.nio.FloatBuffer;
  * 仅作用于预览流，不影响录制流。
  *
  * 工作流程：
- * 1. 创建中间 SurfaceTexture，摄像头输出到此 SurfaceTexture
+ * 1. 创建中间 SurfaceTexture，摄像头输出到此 SurfaceTexture（Camera2 唯一的预览输出）
  * 2. 使用 OES 纹理读取摄像头帧
- * 3. 通过鱼眼矫正片段着色器渲染到 TextureView 的 Surface
+ * 3. 通过鱼眼矫正片段着色器渲染到主 TextureView 的 Surface
+ * 4. 同一帧同时渲染到所有附加输出（补盲悬浮窗、副屏等），共享同一个 GL 管线
  *
  * 矫正模型：Brown-Conrady 径向畸变
  *   r_corrected = r * (1.0 + k1 * r² + k2 * r⁴)
@@ -134,6 +138,11 @@ public class FisheyeCorrector {
     private SurfaceTexture intermediateSurfaceTexture;
     private Surface intermediateSurface;
 
+    // 附加输出 Surface（补盲悬浮窗、副屏等）
+    // key: "mainFloating" / "secondaryDisplay" 等标识
+    private final LinkedHashMap<String, EGLSurface> extraEglSurfaces = new LinkedHashMap<>();
+    private final LinkedHashMap<String, Surface> extraRawSurfaces = new LinkedHashMap<>();
+
     // 矫正参数（可实时更新）
     private volatile float k1 = 0.0f;
     private volatile float k2 = 0.0f;
@@ -236,6 +245,66 @@ public class FisheyeCorrector {
         return isInitialized && !isReleased;
     }
 
+    // ===== 附加输出管理 =====
+
+    /**
+     * 添加一个附加输出 Surface（如补盲悬浮窗、副屏）。
+     * 每帧会同时渲染到主输出和所有附加输出，共享同一个 GL 矫正管线。
+     * 必须在 GL 线程（Handler）上调用，或确保 EGL context 可用。
+     *
+     * @param tag     唯一标识，如 "mainFloating"、"secondaryDisplay"
+     * @param surface 附加输出的 Surface
+     */
+    public void addOutputSurface(String tag, Surface surface) {
+        if (!isInitialized || isReleased) return;
+        if (surface == null || !surface.isValid()) return;
+
+        // 先移除旧的同名 Surface
+        removeOutputSurface(tag);
+
+        try {
+            makeCurrent();
+            int[] attribs = { EGL14.EGL_NONE };
+            EGLSurface eglSurf = EGL14.eglCreateWindowSurface(eglDisplay, eglConfig, surface, attribs, 0);
+            if (eglSurf == EGL14.EGL_NO_SURFACE) {
+                AppLog.e(TAG, "Camera " + cameraId + " failed to create EGL surface for extra output: " + tag);
+                return;
+            }
+            extraEglSurfaces.put(tag, eglSurf);
+            extraRawSurfaces.put(tag, surface);
+            AppLog.d(TAG, "Camera " + cameraId + " added extra output surface: " + tag);
+        } catch (Exception e) {
+            AppLog.e(TAG, "Camera " + cameraId + " error adding extra output " + tag, e);
+        }
+    }
+
+    /**
+     * 移除一个附加输出 Surface。
+     */
+    public void removeOutputSurface(String tag) {
+        EGLSurface eglSurf = extraEglSurfaces.remove(tag);
+        extraRawSurfaces.remove(tag);
+        if (eglSurf != null && eglSurf != EGL14.EGL_NO_SURFACE) {
+            try {
+                // 确保当前 context 不在被移除的 surface 上
+                if (eglSurface != EGL14.EGL_NO_SURFACE) {
+                    EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
+                }
+                EGL14.eglDestroySurface(eglDisplay, eglSurf);
+            } catch (Exception e) {
+                // ignore
+            }
+            AppLog.d(TAG, "Camera " + cameraId + " removed extra output surface: " + tag);
+        }
+    }
+
+    /**
+     * 检查是否存在指定标识的附加输出
+     */
+    public boolean hasOutputSurface(String tag) {
+        return extraEglSurfaces.containsKey(tag);
+    }
+
     // ===== 渲染 =====
 
     private void drawFrame() {
@@ -245,27 +314,14 @@ public class FisheyeCorrector {
         try {
             makeCurrent();
 
+            // 更新 OES 纹理（每帧只调用一次，纹理在所有 EGL Surface 间共享）
             intermediateSurfaceTexture.updateTexImage();
             intermediateSurfaceTexture.getTransformMatrix(texMatrix);
 
-            // 使用实际 EGL Surface 尺寸作为 viewport，确保比例正确
-            int[] vw = new int[1], vh = new int[1];
-            EGL14.eglQuerySurface(eglDisplay, eglSurface, EGL14.EGL_WIDTH, vw, 0);
-            EGL14.eglQuerySurface(eglDisplay, eglSurface, EGL14.EGL_HEIGHT, vh, 0);
-            int viewportW = vw[0] > 0 ? vw[0] : width;
-            int viewportH = vh[0] > 0 ? vh[0] : height;
-            GLES20.glViewport(0, 0, viewportW, viewportH);
-            GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-
+            // 设置 shader 共享状态（Uniform / 纹理绑定 / 顶点属性）
             GLES20.glUseProgram(program);
-            checkGlError("glUseProgram");
-
-            // 绑定 OES 纹理
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTextureId);
-
-            // Uniform
             GLES20.glUniformMatrix4fv(mvpMatrixHandle, 1, false, mvpMatrix, 0);
             GLES20.glUniformMatrix4fv(texMatrixHandle, 1, false, texMatrix, 0);
             GLES20.glUniform1i(textureHandle, 0);
@@ -273,24 +329,58 @@ public class FisheyeCorrector {
             GLES20.glUniform1f(k2Handle, k2);
             GLES20.glUniform1f(zoomHandle, zoom);
             GLES20.glUniform2f(centerHandle, centerX, centerY);
-
-            // 顶点
             GLES20.glEnableVertexAttribArray(positionHandle);
             GLES20.glVertexAttribPointer(positionHandle, 2, GLES20.GL_FLOAT, false, 0, vertexBuffer);
             GLES20.glEnableVertexAttribArray(texCoordHandle);
             GLES20.glVertexAttribPointer(texCoordHandle, 2, GLES20.GL_FLOAT, false, 0, texCoordBuffer);
 
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-            checkGlError("glDrawArrays");
+            // ── 1. 渲染到主输出（TextureView）──
+            renderToSurface(eglSurface);
+
+            // ── 2. 渲染到所有附加输出（补盲悬浮窗、副屏等）──
+            if (!extraEglSurfaces.isEmpty()) {
+                Iterator<Map.Entry<String, EGLSurface>> it = extraEglSurfaces.entrySet().iterator();
+                while (it.hasNext()) {
+                    Map.Entry<String, EGLSurface> entry = it.next();
+                    Surface raw = extraRawSurfaces.get(entry.getKey());
+                    if (raw == null || !raw.isValid()) {
+                        // Surface 已失效，自动清理
+                        try { EGL14.eglDestroySurface(eglDisplay, entry.getValue()); } catch (Exception ignored) {}
+                        extraRawSurfaces.remove(entry.getKey());
+                        it.remove();
+                        AppLog.d(TAG, "Camera " + cameraId + " auto-removed invalid extra surface: " + entry.getKey());
+                        continue;
+                    }
+                    renderToSurface(entry.getValue());
+                }
+                // 恢复主 EGL Surface 为 current
+                EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
+            }
 
             GLES20.glDisableVertexAttribArray(positionHandle);
             GLES20.glDisableVertexAttribArray(texCoordHandle);
 
-            EGL14.eglSwapBuffers(eglDisplay, eglSurface);
-
         } catch (Exception e) {
             AppLog.e(TAG, "Camera " + cameraId + " drawFrame error", e);
         }
+    }
+
+    /**
+     * 渲染矫正帧到指定 EGL Surface（主输出或附加输出共用）
+     */
+    private void renderToSurface(EGLSurface targetSurface) {
+        EGL14.eglMakeCurrent(eglDisplay, targetSurface, targetSurface, eglContext);
+
+        int[] vw = new int[1], vh = new int[1];
+        EGL14.eglQuerySurface(eglDisplay, targetSurface, EGL14.EGL_WIDTH, vw, 0);
+        EGL14.eglQuerySurface(eglDisplay, targetSurface, EGL14.EGL_HEIGHT, vh, 0);
+        GLES20.glViewport(0, 0, vw[0] > 0 ? vw[0] : width, vh[0] > 0 ? vh[0] : height);
+
+        GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+
+        EGL14.eglSwapBuffers(eglDisplay, targetSurface);
     }
 
     // ===== EGL / GL 初始化 =====
@@ -382,6 +472,13 @@ public class FisheyeCorrector {
 
         isReleased = true;
         isInitialized = false;
+
+        // 释放所有附加输出 EGL Surface
+        for (Map.Entry<String, EGLSurface> entry : extraEglSurfaces.entrySet()) {
+            try { EGL14.eglDestroySurface(eglDisplay, entry.getValue()); } catch (Exception ignored) {}
+        }
+        extraEglSurfaces.clear();
+        extraRawSurfaces.clear();
 
         if (intermediateSurfaceTexture != null) {
             intermediateSurfaceTexture.setOnFrameAvailableListener(null);

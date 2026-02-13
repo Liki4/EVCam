@@ -6,9 +6,9 @@ import android.view.TextureView;
 
 public final class BlindSpotCorrection {
     private static final float MIN_SCALE = 0.1f;
-    private static final float MAX_SCALE = 8.0f;
-    private static final float MIN_TRANSLATE = -5.0f;
-    private static final float MAX_TRANSLATE = 5.0f;
+    private static final float MAX_SCALE = 3.0f;
+    private static final float MIN_TRANSLATE = -1.0f;
+    private static final float MAX_TRANSLATE = 1.0f;
 
     private BlindSpotCorrection() {}
 
