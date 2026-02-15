@@ -2094,6 +2094,13 @@ public class SingleCamera {
                 reconnectRunnable = null;
             }
 
+            // 重置 Session 状态标志（防止重新打开时残留状态导致死循环）
+            synchronized (sessionLock) {
+                isSessionClosing = false;
+                isConfiguring = false;
+                isPendingReconfiguration = false;
+            }
+
             // 关闭会话（捕获异常）
             if (captureSession != null) {
                 try {
