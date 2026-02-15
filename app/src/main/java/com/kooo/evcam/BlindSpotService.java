@@ -664,7 +664,8 @@ public class BlindSpotService extends Service {
                     if (delayedCamera == secondaryCamera && delayedSurface == secondaryCachedSurface
                             && delayedSurface != null && delayedSurface.isValid()) {
                         AppLog.d(TAG, "副屏绑定 Surface 并重建 Session: " + cameraPos);
-                        delayedCamera.setSecondaryDisplaySurface(delayedSurface);
+                        android.graphics.SurfaceTexture delaySt = (secondaryTextureView != null && secondaryTextureView.isAvailable()) ? secondaryTextureView.getSurfaceTexture() : null;
+                        delayedCamera.setSecondaryDisplaySurface(delayedSurface, delaySt);
                         delayedCamera.recreateSession(false);
                     }
                 }, 300);
@@ -675,7 +676,8 @@ public class BlindSpotService extends Service {
                 // 自动取消此处的延迟任务并立即创建包含两个 Surface 的 Session，
                 // 避免多个 urgent recreateSession 同时触发导致会话雪崩
                 AppLog.d(TAG, "副屏绑定新 Surface 并重建 Session: " + cameraPos);
-                secondaryCamera.setSecondaryDisplaySurface(secondaryCachedSurface);
+                android.graphics.SurfaceTexture secSt = (secondaryTextureView != null && secondaryTextureView.isAvailable()) ? secondaryTextureView.getSurfaceTexture() : null;
+                secondaryCamera.setSecondaryDisplaySurface(secondaryCachedSurface, secSt);
                 secondaryCamera.recreateSession(false);
             }
             BlindSpotCorrection.apply(secondaryTextureView, appConfig, cameraPos, appConfig.getSecondaryDisplayRotation());

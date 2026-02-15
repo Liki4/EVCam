@@ -62,7 +62,9 @@ public class SingleCamera {
     private Size previewSize;
     private Surface recordSurface;  // 录制Surface
     private Surface mainFloatingSurface; // 主屏悬浮窗Surface
+    private android.graphics.SurfaceTexture mainFloatingSurfaceTexture; // 主屏悬浮窗SurfaceTexture（用于设置buffer尺寸）
     private Surface secondaryDisplaySurface; // 副屏预览Surface
+    private android.graphics.SurfaceTexture secondaryDisplaySurfaceTexture; // 副屏SurfaceTexture（用于设置buffer尺寸）
     private OutputConfiguration activePreviewConfig; // 共享预览配置，用于动态 Surface 增减
     private Surface previewSurface;  // 预览Surface（缓存以避免重复创建）
     private ImageReader imageReader;  // 用于拍照的ImageReader
@@ -325,7 +327,15 @@ public class SingleCamera {
      * 设置主屏悬浮窗Surface
      */
     public void setMainFloatingSurface(Surface surface) {
+        setMainFloatingSurface(surface, null);
+    }
+
+    /**
+     * 设置主屏悬浮窗Surface（带SurfaceTexture引用，用于在创建Session时统一设置buffer尺寸）
+     */
+    public void setMainFloatingSurface(Surface surface, android.graphics.SurfaceTexture surfaceTexture) {
         this.mainFloatingSurface = surface;
+        this.mainFloatingSurfaceTexture = surfaceTexture;
         // 鱼眼模式：清除时立即从 FisheyeCorrector 移除 EGL 输出，
         // 释放 native window 连接，确保新摄像头的 FisheyeCorrector 能成功连接
         if (surface == null && fisheyeCorrector != null && fisheyeCorrector.isInitialized()) {
@@ -346,7 +356,15 @@ public class SingleCamera {
      * 设置副屏显示Surface
      */
     public void setSecondaryDisplaySurface(Surface surface) {
+        setSecondaryDisplaySurface(surface, null);
+    }
+
+    /**
+     * 设置副屏显示Surface（带SurfaceTexture引用，用于在创建Session时统一设置buffer尺寸）
+     */
+    public void setSecondaryDisplaySurface(Surface surface, android.graphics.SurfaceTexture surfaceTexture) {
         this.secondaryDisplaySurface = surface;
+        this.secondaryDisplaySurfaceTexture = surfaceTexture;
         // 鱼眼模式：清除时立即从 FisheyeCorrector 移除 EGL 输出，
         // 释放 native window 连接，确保新摄像头的 FisheyeCorrector 能成功连接
         if (surface == null && fisheyeCorrector != null && fisheyeCorrector.isInitialized()) {
@@ -1274,6 +1292,17 @@ public class SingleCamera {
                     // 非鱼眼模式：使用 Surface Sharing
                     AppLog.d(TAG, "Camera " + cameraId + " Using Surface Sharing for preview streams");
 
+                    // 统一设置所有共享 Surface 的 buffer 尺寸，确保与相机输出一致
+                    // 避免悬浮窗/副屏 TextureView 使用物理布局尺寸导致 OutputConfiguration 尺寸不匹配
+                    if (previewSize != null) {
+                        if (mainFloatingSurfaceTexture != null) {
+                            mainFloatingSurfaceTexture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
+                        }
+                        if (secondaryDisplaySurfaceTexture != null) {
+                            secondaryDisplaySurfaceTexture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
+                        }
+                    }
+
                     if (surface != null && surface.isValid()) {
                         OutputConfiguration previewSharedConfig = new OutputConfiguration(surface);
                         previewSharedConfig.enableSurfaceSharing();
@@ -2148,10 +2177,12 @@ public class SingleCamera {
             if (mainFloatingSurface != null) {
                 AppLog.d(TAG, "Camera " + cameraId + " clearing main floating surface reference");
                 mainFloatingSurface = null;
+                mainFloatingSurfaceTexture = null;
             }
             if (secondaryDisplaySurface != null) {
                 AppLog.d(TAG, "Camera " + cameraId + " clearing secondary display surface reference");
                 secondaryDisplaySurface = null;
+                secondaryDisplaySurfaceTexture = null;
             }
 
             // 释放ImageReader

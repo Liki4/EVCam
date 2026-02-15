@@ -302,15 +302,18 @@ public class MainFloatingWindowView extends FrameLayout {
 
         cancelRetryBind();
 
+        // 传递 SurfaceTexture 引用，便于 createCameraPreviewSession 统一设置 buffer 尺寸
+        android.graphics.SurfaceTexture st = (textureView != null && textureView.isAvailable()) ? textureView.getSurfaceTexture() : null;
+
         // 如果摄像头硬件还未打开（后台初始化时不打开），先打开
         if (!currentCamera.isCameraOpened()) {
-            currentCamera.setMainFloatingSurface(surface);
+            currentCamera.setMainFloatingSurface(surface, st);
             AppLog.d(TAG, "Camera not opened yet, opening now for " + cameraPos);
             // 确保前台服务就绪后再打开相机（避免冷启动时 CAMERA_DISABLED）
             final SingleCamera cam = currentCamera;
             CameraForegroundService.whenReady(getContext(), cam::openCamera);
         } else {
-            currentCamera.setMainFloatingSurface(surface);
+            currentCamera.setMainFloatingSurface(surface, st);
             currentCamera.recreateSession(urgent);
         }
     }
