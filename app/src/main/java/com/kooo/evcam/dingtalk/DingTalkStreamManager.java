@@ -26,8 +26,8 @@ import org.json.JSONObject;
  */
 public class DingTalkStreamManager {
     private static final String TAG = "DingTalkStreamManager";
-    private static final int MAX_RECONNECT_ATTEMPTS = 5;
-    private static final long RECONNECT_DELAY_MS = 5000; // 5秒
+    private static final long RECONNECT_DELAY_MS = 5000; // 初始重连延迟5秒
+    private static final long MAX_RECONNECT_DELAY_MS = 60_000; // 最大重连延迟60秒（指数退避上限）
 
     // 钉钉官方事件主题
     private static final String BOT_MESSAGE_TOPIC = "/v1.0/im/bot/messages/get";
@@ -50,8 +50,8 @@ public class DingTalkStreamManager {
     private volatile boolean networkWasLost = false;
     private Runnable pendingReconnectRunnable;
     private Runnable reconnectCheckRunnable;
-    private static final long RECONNECT_AFTER_NETWORK_DELAY_MS = 3000; // 网络恢复后等3秒再重连
-    private static final long RECONNECT_CHECK_INTERVAL_MS = 180_000; // 3分钟安全网检查
+    private static final long RECONNECT_AFTER_NETWORK_DELAY_MS = 10_000; // 网络恢复后等10秒再重连（深度休眠唤醒后网络栈需要时间就绪）
+    private static final long RECONNECT_CHECK_INTERVAL_MS = 120_000; // 2分钟安全网检查
 
     public interface ConnectionCallback {
         void onConnected();
@@ -194,15 +194,17 @@ public class DingTalkStreamManager {
                 AppLog.e(TAG, "启动 Stream 客户端失败", e);
                 isRunning = false;
 
-                // 如果启用了自动重连，尝试重连
-                if (autoReconnect && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                // 如果启用了自动重连，使用指数退避无限重试
+                if (autoReconnect) {
                     reconnectAttempts++;
-                    AppLog.d(TAG, "将在 " + RECONNECT_DELAY_MS + "ms 后尝试第 " + reconnectAttempts + " 次重连");
+                    // 指数退避：5s, 10s, 20s, 40s, 60s, 60s, ...
+                    long delay = Math.min(RECONNECT_DELAY_MS * (1L << Math.min(reconnectAttempts - 1, 4)), MAX_RECONNECT_DELAY_MS);
+                    AppLog.d(TAG, "将在 " + delay + "ms 后尝试第 " + reconnectAttempts + " 次重连");
                     mainHandler.postDelayed(() -> {
-                        if (autoReconnect) { // 再次检查是否仍需要重连
+                        if (autoReconnect) {
                             startConnection();
                         }
-                    }, RECONNECT_DELAY_MS);
+                    }, delay);
                 } else {
                     mainHandler.post(() -> callback.onError("启动失败: " + e.getMessage()));
                 }
@@ -267,28 +269,27 @@ public class DingTalkStreamManager {
             AppLog.w(TAG, "自动重连未启用，跳过强制重连");
             return;
         }
-        if (!isRunning) {
-            AppLog.d(TAG, "连接未运行，跳过强制重连 (" + reason + ")");
-            return;
-        }
 
         AppLog.d(TAG, "强制重连钉钉 Stream (" + reason + ")");
 
-        // 清理旧连接的网络监控
+        // 清理旧连接的网络监控（安全网检查保留，让它持续守护）
         unregisterNetworkCallback();
-        stopReconnectCheck();
 
+        // 销毁旧连接
         try {
             streamClient = null;
         } catch (Exception e) {
             AppLog.e(TAG, "销毁旧 Stream 客户端失败", e);
         }
 
+        boolean wasRunning = isRunning;
         isRunning = false;
         reconnectAttempts = 0;
 
-        // 通知连接断开
-        mainHandler.post(() -> callback.onDisconnected());
+        // 仅之前在运行时通知断开
+        if (wasRunning) {
+            mainHandler.post(() -> callback.onDisconnected());
+        }
 
         // 取消之前可能存在的重连任务
         if (pendingReconnectRunnable != null) {
@@ -373,22 +374,28 @@ public class DingTalkStreamManager {
         reconnectCheckRunnable = new Runnable() {
             @Override
             public void run() {
-                if (!autoReconnect || !isRunning) return;
+                if (!autoReconnect) return;
 
-                if (networkWasLost) {
-                    try {
-                        ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-                        if (cm != null && cm.getActiveNetwork() != null) {
-                            AppLog.w(TAG, "安全网检查：网络已恢复但未收到回调，强制重连");
-                            networkWasLost = false;
-                            forceReconnect("安全网定时检查");
-                            return;
-                        }
-                    } catch (Exception e) {
-                        AppLog.e(TAG, "安全网检查失败", e);
+                try {
+                    ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+                    boolean hasNetwork = cm != null && cm.getActiveNetwork() != null;
+
+                    if (!isRunning && hasNetwork) {
+                        // 连接断了但网络可用 → 可能重连失败了，再次触发重连
+                        AppLog.w(TAG, "安全网检查：连接未运行但网络可用，触发重连");
+                        networkWasLost = false;
+                        forceReconnect("安全网检查(连接已断开)");
+                    } else if (isRunning && networkWasLost && hasNetwork) {
+                        // 运行中但网络曾丢失且已恢复 → onAvailable 可能被遗漏
+                        AppLog.w(TAG, "安全网检查：网络已恢复但未收到回调，强制重连");
+                        networkWasLost = false;
+                        forceReconnect("安全网检查(网络恢复遗漏)");
                     }
+                } catch (Exception e) {
+                    AppLog.e(TAG, "安全网检查失败", e);
                 }
 
+                // 无论如何都继续下一轮检查
                 mainHandler.postDelayed(this, RECONNECT_CHECK_INTERVAL_MS);
             }
         };
