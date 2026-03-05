@@ -6,8 +6,29 @@ package com.kooo.evcam;
  */
 public class VhalNative {
 
+    private static final String TAG = "VhalNative";
+    
+    private static boolean sLibraryLoaded = false;
+    
     static {
-        System.loadLibrary("vhal_decoder");
+        try {
+            System.loadLibrary("vhal_decoder");
+            sLibraryLoaded = true;
+            AppLog.d(TAG, "Native library loaded successfully");
+        } catch (UnsatisfiedLinkError e) {
+            sLibraryLoaded = false;
+            AppLog.e(TAG, "Failed to load native library: " + e.getMessage());
+        } catch (SecurityException e) {
+            sLibraryLoaded = false;
+            AppLog.e(TAG, "Security error loading native library: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 检查 native 库是否已成功加载
+     */
+    public static boolean isLibraryLoaded() {
+        return sLibraryLoaded;
     }
 
     // Event types returned by decode()

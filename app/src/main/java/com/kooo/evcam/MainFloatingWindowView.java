@@ -14,6 +14,8 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.TextView;
 
 import com.kooo.evcam.camera.CameraManagerHolder;
 import com.kooo.evcam.camera.MultiCameraManager;
@@ -67,6 +69,11 @@ public class MainFloatingWindowView extends FrameLayout {
         } catch (Exception ignored) {}
     };
 
+    private TextView statusPrefixText;
+    private TextView statusText;
+    private ImageView triangleLeft;
+    private ImageView triangleRight;
+
     public MainFloatingWindowView(Context context) {
         this(context, new AppConfig(context));
     }
@@ -83,8 +90,14 @@ public class MainFloatingWindowView extends FrameLayout {
         LayoutInflater.from(getContext()).inflate(R.layout.presentation_secondary_display, this);
         textureView = findViewById(R.id.secondary_texture_view);
 
+        // 初始化状态栏控件
+        statusPrefixText = findViewById(R.id.status_prefix_secondary);
+        statusText = findViewById(R.id.status_text_secondary);
+        triangleLeft = findViewById(R.id.iv_triangle_left);
+        triangleRight = findViewById(R.id.iv_triangle_right);
+
         // 圆角裁切
-        float cornerRadius = 8 * getContext().getResources().getDisplayMetrics().density; // 8dp
+        float cornerRadius = 20 * getContext().getResources().getDisplayMetrics().density; // 20dp
         setOutlineProvider(new android.view.ViewOutlineProvider() {
             @Override
             public void getOutline(View view, android.graphics.Outline outline) {
@@ -651,5 +664,35 @@ public class MainFloatingWindowView extends FrameLayout {
             retryBindRunnable = null;
         }
         retryBindCount = 0;
+    }
+
+    /**
+     * 更新状态栏标签和三角标
+     * @param cameraPos 摄像头位置 ("left" 或 "right")
+     */
+    public void updateStatusLabel(String cameraPos) {
+        if (statusPrefixText == null || statusText == null || triangleLeft == null || triangleRight == null) {
+            return;
+        }
+
+        if ("left".equals(cameraPos)) {
+            // 左转补盲
+            statusPrefixText.setText("左转");
+            statusText.setText("补盲视图");
+            triangleLeft.setVisibility(View.VISIBLE);
+            triangleRight.setVisibility(View.GONE);
+        } else if ("right".equals(cameraPos)) {
+            // 右转补盲
+            statusPrefixText.setText("右转");
+            statusText.setText("补盲视图");
+            triangleLeft.setVisibility(View.GONE);
+            triangleRight.setVisibility(View.VISIBLE);
+        } else {
+            // 默认状态
+            statusPrefixText.setText("补盲");
+            statusText.setText("摄像头");
+            triangleLeft.setVisibility(View.GONE);
+            triangleRight.setVisibility(View.GONE);
+        }
     }
 }

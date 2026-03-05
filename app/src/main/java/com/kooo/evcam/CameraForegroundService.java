@@ -407,11 +407,47 @@ public class CameraForegroundService extends Service {
         intent.putExtra("content", content);
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(intent);
+            // Android 13+ 对摄像头前台服务有特殊要求
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                // 检查应用是否在前台
+                if (!isAppInForeground(context)) {
+                    // 应用不在前台，无法启动摄像头前台服务
+                    // 记录日志，等待应用进入前台后再启动
+                    AppLog.d(TAG, "应用不在前台，跳过启动摄像头前台服务（等待进入前台）");
+                    return;
+                }
+                context.startForegroundService(intent);
+            } else {
+                context.startForegroundService(intent);
+            }
         } else {
             context.startService(intent);
         }
         AppLog.d(TAG, "Starting foreground service: " + title);
+    }
+    
+    /**
+     * 检查应用是否在前台
+     */
+    private static boolean isAppInForeground(Context context) {
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            if (am != null) {
+                java.util.List<android.app.ActivityManager.RunningAppProcessInfo> processes = am.getRunningAppProcesses();
+                if (processes != null) {
+                    for (android.app.ActivityManager.RunningAppProcessInfo process : processes) {
+                        if (process.processName.equals(context.getPackageName())) {
+                            // 优先检查 IMPORTANCE_FOREGROUND 或 IMPORTANCE_VISIBLE
+                            return process.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+                                    || process.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            AppLog.e(TAG, "检查应用前台状态失败: " + e.getMessage(), e);
+        }
+        return false;
     }
 
     /**

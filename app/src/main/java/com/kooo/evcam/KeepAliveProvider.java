@@ -56,6 +56,13 @@ public class KeepAliveProvider extends ContentProvider {
      */
     private void startForegroundService(Context context) {
         try {
+            // Android 13+ 不允许在应用不在前台时启动摄像头前台服务
+            // 需要等到 MainActivity 启动后再启动前台服务
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                AppLog.d(TAG, "Android 13+ 跳过从 Provider 启动摄像头前台服务（等待 MainActivity 启动）");
+                return;
+            }
+            
             // 延迟一小段时间启动，避免在系统初始化完成前启动
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                 try {

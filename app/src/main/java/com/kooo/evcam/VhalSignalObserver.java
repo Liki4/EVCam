@@ -105,6 +105,10 @@ public class VhalSignalObserver {
      * 配置定制键唤醒参数
      */
     public void configureCustomKey(int speedPropId, int buttonPropId, float speedThreshold) {
+        if (!VhalNative.isLibraryLoaded()) {
+            AppLog.w(TAG, "Native library not loaded, skipping custom key configuration");
+            return;
+        }
         VhalNative.configureCustomKey(speedPropId, buttonPropId, speedThreshold);
     }
 
@@ -146,6 +150,12 @@ public class VhalSignalObserver {
      * 一次性连接测试（阻塞调用，用于 UI 状态检查）
      */
     public static boolean testConnection() {
+        // 检查 native 库是否已加载
+        if (!VhalNative.isLibraryLoaded()) {
+            AppLog.w(TAG, "Native library not loaded, skipping gRPC connection test");
+            return false;
+        }
+        
         try {
             java.net.Socket s = new java.net.Socket();
             s.connect(new java.net.InetSocketAddress(VhalNative.getGrpcHost(), VhalNative.getGrpcPort()), 2000);
@@ -189,6 +199,12 @@ public class VhalSignalObserver {
 
     private boolean connect() {
         try {
+            // 检查 native 库是否已加载
+            if (!VhalNative.isLibraryLoaded()) {
+                AppLog.w(TAG, "Native library not loaded, skipping VHAL connection");
+                return false;
+            }
+            
             // 构建连接，附带 session_id 和 client_id metadata
             String sessionId = UUID.randomUUID().toString();
             Metadata headers = new Metadata();
@@ -209,6 +225,9 @@ public class VhalSignalObserver {
             connected = true;
             AppLog.d(TAG, "Channel created, session_id=" + sessionId);
             return true;
+        } catch (UnsatisfiedLinkError e) {
+            AppLog.e(TAG, "Native method not found: " + e.getMessage());
+            return false;
         } catch (Exception e) {
             AppLog.e(TAG, "Connect failed: " + e.getMessage());
             disconnect();
@@ -290,6 +309,8 @@ public class VhalSignalObserver {
                         ClientCalls.blockingUnaryCall(sendCall, new byte[0]);
                         AppLog.d(TAG, "Requested all property values to stream");
                     }
+                } catch (UnsatisfiedLinkError e) {
+                    AppLog.e(TAG, "Native method not found: " + e.getMessage());
                 } catch (Exception e) {
                     AppLog.w(TAG, "SendAll failed (non-fatal): " + e.getMessage());
                 }
@@ -298,6 +319,8 @@ public class VhalSignalObserver {
             // 等待流结束
             latch.await();
 
+        } catch (UnsatisfiedLinkError e) {
+            AppLog.e(TAG, "Native method not found: " + e.getMessage());
         } catch (Exception e) {
             AppLog.e(TAG, "Stream setup failed: " + e.getMessage());
         }
@@ -307,7 +330,19 @@ public class VhalSignalObserver {
      * 处理一批属性值更新（由 native 层解码）
      */
     private void processPropertyBatch(byte[] data) {
-        int[] events = VhalNative.decode(data);
+        if (!VhalNative.isLibraryLoaded()) {
+            AppLog.w(TAG, "Native library not loaded, skipping property batch processing");
+            return;
+        }
+        
+        int[] events;
+        try {
+            events = VhalNative.decode(data);
+        } catch (UnsatisfiedLinkError e) {
+            AppLog.e(TAG, "Native method not found: " + e.getMessage());
+            return;
+        }
+        
         if (events == null || events.length < 1) return;
 
         int numEvents = events[0];

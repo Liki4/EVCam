@@ -2494,6 +2494,33 @@ public class SingleCamera {
                 backgroundHandler.postDelayed(() -> {
                     synchronized (reconnectLock) {
                         try {
+                            // 验证摄像头ID是否存在
+                            String[] availableCameraIds = cameraManager.getCameraIdList();
+                            boolean cameraExists = false;
+                            for (String id : availableCameraIds) {
+                                if (id.equals(cameraId)) {
+                                    cameraExists = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!cameraExists) {
+                                AppLog.e(TAG, "Camera ID " + cameraId + " does not exist anymore. Available IDs: " +
+                                         java.util.Arrays.toString(availableCameraIds));
+                                shouldReconnect = false;
+                                return;
+                            }
+                            
+                            // 验证摄像头是否真正可用
+                            CameraCharacteristics characteristics;
+                            try {
+                                characteristics = cameraManager.getCameraCharacteristics(cameraId);
+                            } catch (Exception e) {
+                                AppLog.e(TAG, "Camera " + cameraId + " failed to get characteristics - camera may be invalid", e);
+                                shouldReconnect = false;
+                                return;
+                            }
+                            
                             cameraManager.openCamera(cameraId, stateCallback, backgroundHandler);
                             AppLog.d(TAG, "Camera " + cameraId + " force reopen initiated");
                         } catch (CameraAccessException e) {
@@ -2503,6 +2530,12 @@ public class SingleCamera {
                             }
                         } catch (SecurityException e) {
                             AppLog.e(TAG, "No camera permission during force reopen", e);
+                        } catch (IllegalArgumentException e) {
+                            AppLog.e(TAG, "Camera " + cameraId + " invalid argument - camera may be virtual/invalid", e);
+                            shouldReconnect = false;
+                        } catch (RuntimeException e) {
+                            AppLog.e(TAG, "Camera " + cameraId + " runtime exception - camera may be virtual/invalid", e);
+                            shouldReconnect = false;
                         }
                     }
                 }, 300);  // 延迟300ms，给系统时间释放资源

@@ -483,6 +483,7 @@ public class BlindSpotService extends Service {
                 mainFloatingWindowView = new MainFloatingWindowView(this, appConfig);
                 mainFloatingWindowView.setDesiredCamera(cameraPos, true);
                 mainFloatingWindowView.show();
+                mainFloatingWindowView.updateStatusLabel(cameraPos);
                 isMainTempShown = true;
                 AppLog.d(TAG, "主屏开启临时补盲悬浮窗");
             }
@@ -500,6 +501,7 @@ public class BlindSpotService extends Service {
             dedicatedBlindSpotWindow = new BlindSpotFloatingWindowView(this, false);
             dedicatedBlindSpotWindow.setCameraPos(cameraPos);
             dedicatedBlindSpotWindow.show();
+            dedicatedBlindSpotWindow.updateStatusLabel(cameraPos);
             // setCamera 需要 CameraManager，延后到初始化之后调用
         }
 
@@ -572,6 +574,7 @@ public class BlindSpotService extends Service {
                     mainFloatingWindowView = new MainFloatingWindowView(this, appConfig);
                     mainFloatingWindowView.setDesiredCamera(cameraPos, true);
                     mainFloatingWindowView.show();
+                    mainFloatingWindowView.updateStatusLabel(cameraPos);
                     isMainTempShown = true;
                     AppLog.d(TAG, "主屏开启临时补盲悬浮窗");
                 }
@@ -590,6 +593,7 @@ public class BlindSpotService extends Service {
                 dedicatedBlindSpotWindow = new BlindSpotFloatingWindowView(this, false);
                 dedicatedBlindSpotWindow.setCameraPos(cameraPos); // 先设置摄像头位置，再 show
                 dedicatedBlindSpotWindow.show();
+                dedicatedBlindSpotWindow.updateStatusLabel(cameraPos);
                 // setCamera 需要 CameraManager，延后到初始化之后调用
             }
         } else {
@@ -894,6 +898,7 @@ public class BlindSpotService extends Service {
                 mainFloatingWindowView = new MainFloatingWindowView(this, appConfig);
                 mainFloatingWindowView.setDesiredCamera(side, true);
                 mainFloatingWindowView.show();
+                mainFloatingWindowView.updateStatusLabel(side);
                 isMainTempShown = true;
                 AppLog.i(TAG, "🚪 ✅ 主屏车门临时补盲悬浮窗已显示");
             } else {
@@ -916,6 +921,7 @@ public class BlindSpotService extends Service {
             dedicatedBlindSpotWindow = new BlindSpotFloatingWindowView(this, false);
             dedicatedBlindSpotWindow.setCameraPos(side);
             dedicatedBlindSpotWindow.show();
+            dedicatedBlindSpotWindow.updateStatusLabel(side);
             // setCamera 需要 CameraManager，延后到初始化之后调用
         }
         

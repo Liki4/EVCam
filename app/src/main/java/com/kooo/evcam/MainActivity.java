@@ -1144,6 +1144,7 @@ public class MainActivity extends AppCompatActivity {
         android.widget.FrameLayout frameBack = findViewById(R.id.frame_back);
         android.widget.FrameLayout frameLeft = findViewById(R.id.frame_left);
         android.widget.FrameLayout frameRight = findViewById(R.id.frame_right);
+        android.widget.FrameLayout frameVehicleControl = findViewById(R.id.frame_vehicle_control);
         View editControls = findViewById(R.id.edit_controls);
         View containerCameras = findViewById(R.id.container_cameras);
         
@@ -1158,6 +1159,7 @@ public class MainActivity extends AppCompatActivity {
         if (configuredCameraCount < 4) {
             if (frameLeft != null) frameLeft.setVisibility(View.GONE);
             if (frameRight != null) frameRight.setVisibility(View.GONE);
+            if (frameVehicleControl != null) frameVehicleControl.setVisibility(View.GONE);
         }
         if (configuredCameraCount < 2) {
             if (frameBack != null) frameBack.setVisibility(View.GONE);
@@ -1179,7 +1181,7 @@ public class MainActivity extends AppCompatActivity {
             customLayoutManager.updateButtonContainer(newContainer);
         });
         customLayoutManager.setupFloatingViews(
-                frameFront, frameBack, frameLeft, frameRight, 
+                frameFront, frameBack, frameLeft, frameRight, frameVehicleControl,
                 buttonContainer, editControls, containerCameras,
                 textureFront, textureBack, textureLeft, textureRight);
 
@@ -3253,7 +3255,7 @@ public class MainActivity extends AppCompatActivity {
         android.content.IntentFilter filter = new android.content.IntentFilter();
         filter.addAction(android.content.Intent.ACTION_SCREEN_OFF);
         filter.addAction(android.content.Intent.ACTION_SCREEN_ON);
-        registerReceiver(screenStateReceiver, filter);
+        registerReceiver(screenStateReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED);
         
         AppLog.d(TAG, "息屏状态广播接收器已注册");
         
@@ -3281,7 +3283,7 @@ public class MainActivity extends AppCompatActivity {
         
         android.content.IntentFilter filter = new android.content.IntentFilter();
         filter.addAction(WakeUpHelper.ACTION_MOVE_TO_BACKGROUND);
-        registerReceiver(backgroundCommandReceiver, filter);
+        registerReceiver(backgroundCommandReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED);
         
         AppLog.d(TAG, "后台切换广播接收器已注册");
     }

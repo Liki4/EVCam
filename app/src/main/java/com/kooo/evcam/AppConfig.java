@@ -270,6 +270,41 @@ public class AppConfig {
     private static final String KEY_CUSTOM_BUTTON_STYLE = "custom_button_style";  // 按钮样式（standard/multi）
     private static final String KEY_CUSTOM_BUTTON_ORIENTATION = "custom_button_orientation";  // 按钮布局方向（horizontal/vertical）
     private static final String KEY_CUSTOM_LAYOUT_DATA = "custom_layout_data";  // 布局位置数据（JSON格式）
+
+    // 前轮/后轮模式视图配置（用于自定义车型）
+    private static final String KEY_FRONT_WHEEL_LEFT_WIDTH = "front_wheel_left_width";
+    private static final String KEY_FRONT_WHEEL_LEFT_HEIGHT = "front_wheel_left_height";
+    private static final String KEY_FRONT_WHEEL_LEFT_X = "front_wheel_left_x";
+    private static final String KEY_FRONT_WHEEL_LEFT_Y = "front_wheel_left_y";
+    private static final String KEY_FRONT_WHEEL_LEFT_ROTATION = "front_wheel_left_rotation";
+    private static final String KEY_FRONT_WHEEL_RIGHT_WIDTH = "front_wheel_right_width";
+    private static final String KEY_FRONT_WHEEL_RIGHT_HEIGHT = "front_wheel_right_height";
+    private static final String KEY_FRONT_WHEEL_RIGHT_X = "front_wheel_right_x";
+    private static final String KEY_FRONT_WHEEL_RIGHT_Y = "front_wheel_right_y";
+    private static final String KEY_FRONT_WHEEL_RIGHT_ROTATION = "front_wheel_right_rotation";
+
+    private static final String KEY_REAR_WHEEL_LEFT_WIDTH = "rear_wheel_left_width";
+    private static final String KEY_REAR_WHEEL_LEFT_HEIGHT = "rear_wheel_left_height";
+    private static final String KEY_REAR_WHEEL_LEFT_X = "rear_wheel_left_x";
+    private static final String KEY_REAR_WHEEL_LEFT_Y = "rear_wheel_left_y";
+    private static final String KEY_REAR_WHEEL_LEFT_ROTATION = "rear_wheel_left_rotation";
+    private static final String KEY_REAR_WHEEL_RIGHT_WIDTH = "rear_wheel_right_width";
+    private static final String KEY_REAR_WHEEL_RIGHT_HEIGHT = "rear_wheel_right_height";
+    private static final String KEY_REAR_WHEEL_RIGHT_X = "rear_wheel_right_x";
+    private static final String KEY_REAR_WHEEL_RIGHT_Y = "rear_wheel_right_y";
+    private static final String KEY_REAR_WHEEL_RIGHT_ROTATION = "rear_wheel_right_rotation";
+
+    // 普通模式（默认模式）的视图配置
+    private static final String KEY_NORMAL_LEFT_WIDTH = "normal_left_width";
+    private static final String KEY_NORMAL_LEFT_HEIGHT = "normal_left_height";
+    private static final String KEY_NORMAL_LEFT_X = "normal_left_x";
+    private static final String KEY_NORMAL_LEFT_Y = "normal_left_y";
+    private static final String KEY_NORMAL_LEFT_ROTATION = "normal_left_rotation";
+    private static final String KEY_NORMAL_RIGHT_WIDTH = "normal_right_width";
+    private static final String KEY_NORMAL_RIGHT_HEIGHT = "normal_right_height";
+    private static final String KEY_NORMAL_RIGHT_X = "normal_right_x";
+    private static final String KEY_NORMAL_RIGHT_Y = "normal_right_y";
+    private static final String KEY_NORMAL_RIGHT_ROTATION = "normal_right_rotation";
     
     // 按钮样式常量
     public static final String BUTTON_STYLE_STANDARD = "standard";  // 标准按钮（E5风格）
@@ -2723,5 +2758,349 @@ public class AppConfig {
      */
     public int getCustomKeyButtonPropId() {
         return prefs.getInt(KEY_CUSTOM_KEY_BUTTON_PROP_ID, 557872183);
+    }
+
+    // ==================== 前轮/后轮模式视图配置相关方法 ====================
+
+    /**
+     * 设置前轮模式左视图参数
+     */
+    public void setFrontWheelLeftViewParams(int width, int height, int x, int y, int rotation) {
+        prefs.edit()
+                .putInt(KEY_FRONT_WHEEL_LEFT_WIDTH, width)
+                .putInt(KEY_FRONT_WHEEL_LEFT_HEIGHT, height)
+                .putInt(KEY_FRONT_WHEEL_LEFT_X, x)
+                .putInt(KEY_FRONT_WHEEL_LEFT_Y, y)
+                .putInt(KEY_FRONT_WHEEL_LEFT_ROTATION, rotation)
+                .apply();
+        AppLog.d(TAG, "前轮模式左视图参数已保存: " + width + "x" + height + " @(" + x + "," + y + ") 旋转" + rotation + "°");
+    }
+
+    /**
+     * 获取前轮模式左视图宽度
+     */
+    public int getFrontWheelLeftWidth(int defaultValue) {
+        return prefs.getInt(KEY_FRONT_WHEEL_LEFT_WIDTH, defaultValue);
+    }
+
+    /**
+     * 获取前轮模式左视图高度
+     */
+    public int getFrontWheelLeftHeight(int defaultValue) {
+        return prefs.getInt(KEY_FRONT_WHEEL_LEFT_HEIGHT, defaultValue);
+    }
+
+    /**
+     * 获取前轮模式左视图X位置
+     */
+    public int getFrontWheelLeftX(int defaultValue) {
+        return prefs.getInt(KEY_FRONT_WHEEL_LEFT_X, defaultValue);
+    }
+
+    /**
+     * 获取前轮模式左视图Y位置
+     */
+    public int getFrontWheelLeftY(int defaultValue) {
+        return prefs.getInt(KEY_FRONT_WHEEL_LEFT_Y, defaultValue);
+    }
+
+    /**
+     * 获取前轮模式左视图旋转角度
+     */
+    public int getFrontWheelLeftRotation(int defaultValue) {
+        return prefs.getInt(KEY_FRONT_WHEEL_LEFT_ROTATION, defaultValue);
+    }
+
+    /**
+     * 设置前轮模式右视图参数
+     */
+    public void setFrontWheelRightViewParams(int width, int height, int x, int y, int rotation) {
+        prefs.edit()
+                .putInt(KEY_FRONT_WHEEL_RIGHT_WIDTH, width)
+                .putInt(KEY_FRONT_WHEEL_RIGHT_HEIGHT, height)
+                .putInt(KEY_FRONT_WHEEL_RIGHT_X, x)
+                .putInt(KEY_FRONT_WHEEL_RIGHT_Y, y)
+                .putInt(KEY_FRONT_WHEEL_RIGHT_ROTATION, rotation)
+                .apply();
+        AppLog.d(TAG, "前轮模式右视图参数已保存: " + width + "x" + height + " @(" + x + "," + y + ") 旋转" + rotation + "°");
+    }
+
+    /**
+     * 获取前轮模式右视图宽度
+     */
+    public int getFrontWheelRightWidth(int defaultValue) {
+        return prefs.getInt(KEY_FRONT_WHEEL_RIGHT_WIDTH, defaultValue);
+    }
+
+    /**
+     * 获取前轮模式右视图高度
+     */
+    public int getFrontWheelRightHeight(int defaultValue) {
+        return prefs.getInt(KEY_FRONT_WHEEL_RIGHT_HEIGHT, defaultValue);
+    }
+
+    /**
+     * 获取前轮模式右视图X位置
+     */
+    public int getFrontWheelRightX(int defaultValue) {
+        return prefs.getInt(KEY_FRONT_WHEEL_RIGHT_X, defaultValue);
+    }
+
+    /**
+     * 获取前轮模式右视图Y位置
+     */
+    public int getFrontWheelRightY(int defaultValue) {
+        return prefs.getInt(KEY_FRONT_WHEEL_RIGHT_Y, defaultValue);
+    }
+
+    /**
+     * 获取前轮模式右视图旋转角度
+     */
+    public int getFrontWheelRightRotation(int defaultValue) {
+        return prefs.getInt(KEY_FRONT_WHEEL_RIGHT_ROTATION, defaultValue);
+    }
+
+    /**
+     * 设置后轮模式左视图参数
+     */
+    public void setRearWheelLeftViewParams(int width, int height, int x, int y, int rotation) {
+        prefs.edit()
+                .putInt(KEY_REAR_WHEEL_LEFT_WIDTH, width)
+                .putInt(KEY_REAR_WHEEL_LEFT_HEIGHT, height)
+                .putInt(KEY_REAR_WHEEL_LEFT_X, x)
+                .putInt(KEY_REAR_WHEEL_LEFT_Y, y)
+                .putInt(KEY_REAR_WHEEL_LEFT_ROTATION, rotation)
+                .apply();
+        AppLog.d(TAG, "后轮模式左视图参数已保存: " + width + "x" + height + " @(" + x + "," + y + ") 旋转" + rotation + "°");
+    }
+
+    /**
+     * 获取后轮模式左视图宽度
+     */
+    public int getRearWheelLeftWidth(int defaultValue) {
+        return prefs.getInt(KEY_REAR_WHEEL_LEFT_WIDTH, defaultValue);
+    }
+
+    /**
+     * 获取后轮模式左视图高度
+     */
+    public int getRearWheelLeftHeight(int defaultValue) {
+        return prefs.getInt(KEY_REAR_WHEEL_LEFT_HEIGHT, defaultValue);
+    }
+
+    /**
+     * 获取后轮模式左视图X位置
+     */
+    public int getRearWheelLeftX(int defaultValue) {
+        return prefs.getInt(KEY_REAR_WHEEL_LEFT_X, defaultValue);
+    }
+
+    /**
+     * 获取后轮模式左视图Y位置
+     */
+    public int getRearWheelLeftY(int defaultValue) {
+        return prefs.getInt(KEY_REAR_WHEEL_LEFT_Y, defaultValue);
+    }
+
+    /**
+     * 获取后轮模式左视图旋转角度
+     */
+    public int getRearWheelLeftRotation(int defaultValue) {
+        return prefs.getInt(KEY_REAR_WHEEL_LEFT_ROTATION, defaultValue);
+    }
+
+    /**
+     * 设置后轮模式右视图参数
+     */
+    public void setRearWheelRightViewParams(int width, int height, int x, int y, int rotation) {
+        prefs.edit()
+                .putInt(KEY_REAR_WHEEL_RIGHT_WIDTH, width)
+                .putInt(KEY_REAR_WHEEL_RIGHT_HEIGHT, height)
+                .putInt(KEY_REAR_WHEEL_RIGHT_X, x)
+                .putInt(KEY_REAR_WHEEL_RIGHT_Y, y)
+                .putInt(KEY_REAR_WHEEL_RIGHT_ROTATION, rotation)
+                .apply();
+        AppLog.d(TAG, "后轮模式右视图参数已保存: " + width + "x" + height + " @(" + x + "," + y + ") 旋转" + rotation + "°");
+    }
+
+    /**
+     * 获取后轮模式右视图宽度
+     */
+    public int getRearWheelRightWidth(int defaultValue) {
+        return prefs.getInt(KEY_REAR_WHEEL_RIGHT_WIDTH, defaultValue);
+    }
+
+    /**
+     * 获取后轮模式右视图高度
+     */
+    public int getRearWheelRightHeight(int defaultValue) {
+        return prefs.getInt(KEY_REAR_WHEEL_RIGHT_HEIGHT, defaultValue);
+    }
+
+    /**
+     * 获取后轮模式右视图X位置
+     */
+    public int getRearWheelRightX(int defaultValue) {
+        return prefs.getInt(KEY_REAR_WHEEL_RIGHT_X, defaultValue);
+    }
+
+    /**
+     * 获取后轮模式右视图Y位置
+     */
+    public int getRearWheelRightY(int defaultValue) {
+        return prefs.getInt(KEY_REAR_WHEEL_RIGHT_Y, defaultValue);
+    }
+
+    /**
+     * 获取后轮模式右视图旋转角度
+     */
+    public int getRearWheelRightRotation(int defaultValue) {
+        return prefs.getInt(KEY_REAR_WHEEL_RIGHT_ROTATION, defaultValue);
+    }
+
+    /**
+     * 设置普通模式左视图参数
+     */
+    public void setNormalLeftViewParams(int width, int height, int x, int y, int rotation) {
+        prefs.edit()
+                .putInt(KEY_NORMAL_LEFT_WIDTH, width)
+                .putInt(KEY_NORMAL_LEFT_HEIGHT, height)
+                .putInt(KEY_NORMAL_LEFT_X, x)
+                .putInt(KEY_NORMAL_LEFT_Y, y)
+                .putInt(KEY_NORMAL_LEFT_ROTATION, rotation)
+                .apply();
+        AppLog.d(TAG, "普通模式左视图参数已保存: " + width + "x" + height + " @(" + x + "," + y + ") 旋转" + rotation + "°");
+    }
+
+    /**
+     * 获取普通模式左视图宽度
+     */
+    public int getNormalLeftWidth(int defaultValue) {
+        return prefs.getInt(KEY_NORMAL_LEFT_WIDTH, defaultValue);
+    }
+
+    /**
+     * 获取普通模式左视图高度
+     */
+    public int getNormalLeftHeight(int defaultValue) {
+        return prefs.getInt(KEY_NORMAL_LEFT_HEIGHT, defaultValue);
+    }
+
+    /**
+     * 获取普通模式左视图X位置
+     */
+    public int getNormalLeftX(int defaultValue) {
+        return prefs.getInt(KEY_NORMAL_LEFT_X, defaultValue);
+    }
+
+    /**
+     * 获取普通模式左视图Y位置
+     */
+    public int getNormalLeftY(int defaultValue) {
+        return prefs.getInt(KEY_NORMAL_LEFT_Y, defaultValue);
+    }
+
+    /**
+     * 获取普通模式左视图旋转角度
+     */
+    public int getNormalLeftRotation(int defaultValue) {
+        return prefs.getInt(KEY_NORMAL_LEFT_ROTATION, defaultValue);
+    }
+
+    /**
+     * 设置普通模式右视图参数
+     */
+    public void setNormalRightViewParams(int width, int height, int x, int y, int rotation) {
+        prefs.edit()
+                .putInt(KEY_NORMAL_RIGHT_WIDTH, width)
+                .putInt(KEY_NORMAL_RIGHT_HEIGHT, height)
+                .putInt(KEY_NORMAL_RIGHT_X, x)
+                .putInt(KEY_NORMAL_RIGHT_Y, y)
+                .putInt(KEY_NORMAL_RIGHT_ROTATION, rotation)
+                .apply();
+        AppLog.d(TAG, "普通模式右视图参数已保存: " + width + "x" + height + " @(" + x + "," + y + ") 旋转" + rotation + "°");
+    }
+
+    /**
+     * 获取普通模式右视图宽度
+     */
+    public int getNormalRightWidth(int defaultValue) {
+        return prefs.getInt(KEY_NORMAL_RIGHT_WIDTH, defaultValue);
+    }
+
+    /**
+     * 获取普通模式右视图高度
+     */
+    public int getNormalRightHeight(int defaultValue) {
+        return prefs.getInt(KEY_NORMAL_RIGHT_HEIGHT, defaultValue);
+    }
+
+    /**
+     * 获取普通模式右视图X位置
+     */
+    public int getNormalRightX(int defaultValue) {
+        return prefs.getInt(KEY_NORMAL_RIGHT_X, defaultValue);
+    }
+
+    /**
+     * 获取普通模式右视图Y位置
+     */
+    public int getNormalRightY(int defaultValue) {
+        return prefs.getInt(KEY_NORMAL_RIGHT_Y, defaultValue);
+    }
+
+    /**
+     * 获取普通模式右视图旋转角度
+     */
+    public int getNormalRightRotation(int defaultValue) {
+        return prefs.getInt(KEY_NORMAL_RIGHT_ROTATION, defaultValue);
+    }
+
+    /**
+     * 重置前轮模式视图参数为默认值
+     * 默认值与普通模式相同
+     */
+    public void resetFrontWheelViewParams(int defaultLeftWidth, int defaultLeftHeight, int defaultRightWidth, int defaultRightHeight, int containerHeight) {
+        int halfHeight = (containerHeight - 20) / 2;
+        int padding = 10;
+        int vehicleControlWidth = 280;
+
+        setFrontWheelLeftViewParams(defaultLeftWidth, halfHeight, padding, padding * 2 + halfHeight, 0);
+        setFrontWheelRightViewParams(defaultRightWidth, halfHeight, padding * 2 + defaultLeftWidth + vehicleControlWidth, padding * 2 + halfHeight, 0);
+        AppLog.d(TAG, "前轮模式视图参数已重置为默认值");
+    }
+
+    /**
+     * 重置后轮模式视图参数为默认值
+     * 默认值与普通模式相同
+     */
+    public void resetRearWheelViewParams(int defaultLeftWidth, int defaultLeftHeight, int defaultRightWidth, int defaultRightHeight, int containerHeight) {
+        int halfHeight = (containerHeight - 20) / 2;
+        int padding = 10;
+        int vehicleControlWidth = 280;
+
+        setRearWheelLeftViewParams(defaultLeftWidth, halfHeight, padding, padding * 2 + halfHeight, 0);
+        setRearWheelRightViewParams(defaultRightWidth, halfHeight, padding * 2 + defaultLeftWidth + vehicleControlWidth, padding * 2 + halfHeight, 0);
+        AppLog.d(TAG, "后轮模式视图参数已重置为默认值");
+    }
+
+    /**
+     * 重置普通模式视图参数为默认值
+     * 普通模式下保持车辆控制区域可见，左右视图宽度相等
+     */
+    public void resetNormalViewParams(int defaultLeftWidth, int defaultLeftHeight, int defaultRightWidth, int defaultRightHeight, int containerHeight) {
+        int halfHeight = (containerHeight - 20) / 2;
+        int padding = 10;
+        int vehicleControlWidth = 280;
+        
+        // 计算左右视图宽度，使其相等且右视图右边缘与后视图对齐
+        int totalViewWidth = defaultLeftWidth + defaultRightWidth + vehicleControlWidth + padding * 4;
+        // 从传入的宽度反推容器宽度，这里简化处理
+        int leftViewWidth = defaultLeftWidth;
+        int rightViewWidth = defaultRightWidth;
+
+        setNormalLeftViewParams(leftViewWidth, halfHeight, padding, padding * 2 + halfHeight, 0);
+        setNormalRightViewParams(rightViewWidth, halfHeight, padding * 2 + leftViewWidth + vehicleControlWidth, padding * 2 + halfHeight, 0);
+        AppLog.d(TAG, "普通模式视图参数已重置为默认值");
     }
 }

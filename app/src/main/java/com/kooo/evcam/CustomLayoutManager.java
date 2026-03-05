@@ -6,7 +6,10 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import org.json.JSONException;
@@ -38,6 +41,7 @@ public class CustomLayoutManager {
     private FrameLayout frameBack;
     private FrameLayout frameLeft;
     private FrameLayout frameRight;
+    private FrameLayout frameVehicleControl;
     private ViewGroup buttonContainer;
     
     // TextureView 引用（用于旋转和镜像）
@@ -105,7 +109,7 @@ public class CustomLayoutManager {
      * 初始化自由操控功能
      */
     public void setupFloatingViews(FrameLayout frameFront, FrameLayout frameBack,
-                                   FrameLayout frameLeft, FrameLayout frameRight,
+                                   FrameLayout frameLeft, FrameLayout frameRight, FrameLayout frameVehicleControl,
                                    ViewGroup buttonContainer, View editControlsView,
                                    View containerCameras,
                                    TextureView textureFront, TextureView textureBack,
@@ -114,6 +118,7 @@ public class CustomLayoutManager {
         this.frameBack = frameBack;
         this.frameLeft = frameLeft;
         this.frameRight = frameRight;
+        this.frameVehicleControl = frameVehicleControl;
         this.buttonContainer = buttonContainer;
         this.editControlsView = editControlsView;
         this.containerCameras = containerCameras;
@@ -144,6 +149,9 @@ public class CustomLayoutManager {
         if (frameRight != null) {
             setupCameraFrame(frameRight, "right");
             setupRotateMirrorButtons(frameRight, "right", textureRight);
+        }
+        if (frameVehicleControl != null) {
+            setupVehicleControlButtons();
         }
         if (buttonContainer != null) {
             setupButtonContainer(buttonContainer);
@@ -440,6 +448,709 @@ public class CustomLayoutManager {
         }
     }
     
+    /**
+     * 设置车辆控制按钮
+     * 前轮和后轮按键的选中/未选中状态切换（互斥选择）
+     */
+    private void setupVehicleControlButtons() {
+        if (frameVehicleControl == null) return;
+
+        Button btnFrontWheel = frameVehicleControl.findViewById(R.id.btn_front_wheel);
+        Button btnRearWheel = frameVehicleControl.findViewById(R.id.btn_rear_wheel);
+        ImageView ivVehicleOutline = frameVehicleControl.findViewById(R.id.iv_vehicle_outline);
+
+        if (btnFrontWheel != null) {
+            btnFrontWheel.setOnClickListener(v -> {
+                boolean isSelected = btnFrontWheel.getTag() != null && (Boolean) btnFrontWheel.getTag();
+
+                if (isSelected) {
+                    // 已选中，取消选中
+                    isSelected = false;
+                    btnFrontWheel.setTag(isSelected);
+                    setButtonUnselected(btnFrontWheel);
+                    // 切换到普通模式，恢复默认车辆轮廓
+                    if (ivVehicleOutline != null) {
+                        ivVehicleOutline.setImageResource(R.drawable.ic_vehicle_outline_normal);
+                    }
+                    applyNormalModeLayout();
+                } else {
+                    // 未选中，选中前轮并取消后轮选中
+                    isSelected = true;
+                    btnFrontWheel.setTag(isSelected);
+                    setButtonSelected(btnFrontWheel);
+
+                    // 取消后轮选中状态
+                    if (btnRearWheel != null) {
+                        btnRearWheel.setTag(false);
+                        setButtonUnselected(btnRearWheel);
+                    }
+
+                    // 更新车辆轮廓示意图，前轮显示绿色
+                    if (ivVehicleOutline != null) {
+                        ivVehicleOutline.setImageResource(R.drawable.ic_vehicle_outline_front);
+                    }
+
+                    // 切换到前轮模式
+                    applyFrontWheelModeLayout();
+                }
+
+                AppLog.d(TAG, "前轮按键状态: " + (isSelected ? "选中" : "未选中"));
+            });
+
+            // 长按事件：弹出前轮模式设置弹窗
+            btnFrontWheel.setOnLongClickListener(v -> {
+                showWheelSettingsDialog("front");
+                return true;
+            });
+        }
+
+        if (btnRearWheel != null) {
+            btnRearWheel.setOnClickListener(v -> {
+                boolean isSelected = btnRearWheel.getTag() != null && (Boolean) btnRearWheel.getTag();
+
+                if (isSelected) {
+                    // 已选中，取消选中
+                    isSelected = false;
+                    btnRearWheel.setTag(isSelected);
+                    setButtonUnselected(btnRearWheel);
+                    // 切换到普通模式，恢复默认车辆轮廓
+                    if (ivVehicleOutline != null) {
+                        ivVehicleOutline.setImageResource(R.drawable.ic_vehicle_outline_normal);
+                    }
+                    applyNormalModeLayout();
+                } else {
+                    // 未选中，选中后轮并取消前轮选中
+                    isSelected = true;
+                    btnRearWheel.setTag(isSelected);
+                    setButtonSelected(btnRearWheel);
+
+                    // 取消前轮选中状态
+                    if (btnFrontWheel != null) {
+                        btnFrontWheel.setTag(false);
+                        setButtonUnselected(btnFrontWheel);
+                    }
+
+                    // 更新车辆轮廓示意图，后轮显示绿色
+                    if (ivVehicleOutline != null) {
+                        ivVehicleOutline.setImageResource(R.drawable.ic_vehicle_outline_rear);
+                    }
+
+                    // 切换到后轮模式
+                    applyRearWheelModeLayout();
+                }
+
+                AppLog.d(TAG, "后轮按键状态: " + (isSelected ? "选中" : "未选中"));
+            });
+
+            // 长按事件：弹出后轮模式设置弹窗
+            btnRearWheel.setOnLongClickListener(v -> {
+                showWheelSettingsDialog("rear");
+                return true;
+            });
+        }
+    }
+
+    /**
+     * 显示车轮模式设置弹窗
+     * @param mode "front" 前轮模式, "rear" 后轮模式
+     */
+    private void showWheelSettingsDialog(String mode) {
+        if (containerCameras == null) return;
+
+        // 创建弹窗
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(context);
+        View dialogView = android.view.LayoutInflater.from(context).inflate(R.layout.dialog_wheel_settings, null);
+        builder.setView(dialogView);
+
+        // 设置标题
+        TextView tvTitle = dialogView.findViewById(R.id.tv_title);
+        tvTitle.setText(mode.equals("front") ? "前轮模式设置" : "后轮模式设置");
+
+        // 获取当前容器尺寸
+        int containerWidth = containerCameras.getWidth();
+        int containerHeight = containerCameras.getHeight();
+        
+        // 前轮模式默认值
+        int frontLeftWidth = 1120;
+        int frontLeftHeight = 662;
+        int frontLeftX = 10;
+        int frontLeftY = 397;
+        int frontLeftRotation = 270;
+        int frontRightWidth = 1211;
+        int frontRightHeight = 662;
+        int frontRightX = -76;
+        int frontRightY = 502;
+        int frontRightRotation = 90;
+        
+        // 后轮模式默认值
+        int rearLeftWidth = 1120;
+        int rearLeftHeight = 662;
+        int rearLeftX = 10;
+        int rearLeftY = -624;
+        int rearLeftRotation = 270;
+        int rearRightWidth = 1298;
+        int rearRightHeight = 662;
+        int rearRightX = -164;
+        int rearRightY = -702;
+        int rearRightRotation = 90;
+
+        // 获取SeekBar和TextView引用
+        android.widget.SeekBar sbLeftWidth = dialogView.findViewById(R.id.sb_left_width);
+        android.widget.SeekBar sbLeftHeight = dialogView.findViewById(R.id.sb_left_height);
+        android.widget.SeekBar sbLeftX = dialogView.findViewById(R.id.sb_left_x);
+        android.widget.SeekBar sbLeftY = dialogView.findViewById(R.id.sb_left_y);
+        android.widget.SeekBar sbLeftRotation = dialogView.findViewById(R.id.sb_left_rotation);
+        android.widget.SeekBar sbRightWidth = dialogView.findViewById(R.id.sb_right_width);
+        android.widget.SeekBar sbRightHeight = dialogView.findViewById(R.id.sb_right_height);
+        android.widget.SeekBar sbRightX = dialogView.findViewById(R.id.sb_right_x);
+        android.widget.SeekBar sbRightY = dialogView.findViewById(R.id.sb_right_y);
+        android.widget.SeekBar sbRightRotation = dialogView.findViewById(R.id.sb_right_rotation);
+
+        TextView tvLeftWidthValue = dialogView.findViewById(R.id.tv_left_width_value);
+        TextView tvLeftHeightValue = dialogView.findViewById(R.id.tv_left_height_value);
+        TextView tvLeftXValue = dialogView.findViewById(R.id.tv_left_x_value);
+        TextView tvLeftYValue = dialogView.findViewById(R.id.tv_left_y_value);
+        TextView tvLeftRotationValue = dialogView.findViewById(R.id.tv_left_rotation_value);
+        TextView tvRightWidthValue = dialogView.findViewById(R.id.tv_right_width_value);
+        TextView tvRightHeightValue = dialogView.findViewById(R.id.tv_right_height_value);
+        TextView tvRightXValue = dialogView.findViewById(R.id.tv_right_x_value);
+        TextView tvRightYValue = dialogView.findViewById(R.id.tv_right_y_value);
+        TextView tvRightRotationValue = dialogView.findViewById(R.id.tv_right_rotation_value);
+
+        // 加载当前保存的值
+        // 使用各自模式的默认值
+        int[] leftValues = new int[5];
+        int[] rightValues = new int[5];
+        
+        if (mode.equals("front")) {
+            leftValues[0] = appConfig.getFrontWheelLeftWidth(frontLeftWidth);
+            leftValues[1] = appConfig.getFrontWheelLeftHeight(frontLeftHeight);
+            leftValues[2] = appConfig.getFrontWheelLeftX(frontLeftX);
+            leftValues[3] = appConfig.getFrontWheelLeftY(frontLeftY);
+            leftValues[4] = appConfig.getFrontWheelLeftRotation(frontLeftRotation);
+            rightValues[0] = appConfig.getFrontWheelRightWidth(frontRightWidth);
+            rightValues[1] = appConfig.getFrontWheelRightHeight(frontRightHeight);
+            rightValues[2] = appConfig.getFrontWheelRightX(frontRightX);
+            rightValues[3] = appConfig.getFrontWheelRightY(frontRightY);
+            rightValues[4] = appConfig.getFrontWheelRightRotation(frontRightRotation);
+        } else {
+            leftValues[0] = appConfig.getRearWheelLeftWidth(rearLeftWidth);
+            leftValues[1] = appConfig.getRearWheelLeftHeight(rearLeftHeight);
+            leftValues[2] = appConfig.getRearWheelLeftX(rearLeftX);
+            leftValues[3] = appConfig.getRearWheelLeftY(rearLeftY);
+            leftValues[4] = appConfig.getRearWheelLeftRotation(rearLeftRotation);
+            rightValues[0] = appConfig.getRearWheelRightWidth(rearRightWidth);
+            rightValues[1] = appConfig.getRearWheelRightHeight(rearRightHeight);
+            rightValues[2] = appConfig.getRearWheelRightX(rearRightX);
+            rightValues[3] = appConfig.getRearWheelRightY(rearRightY);
+            rightValues[4] = appConfig.getRearWheelRightRotation(rearRightRotation);
+        }
+
+        // 设置SeekBar初始值和最大值
+        // X和Y位置的范围为-1000到1000，SeekBar的0-2000对应实际值-1000到1000
+        final int POSITION_OFFSET = 1000;
+        final int POSITION_MAX = 2000;
+        
+        sbLeftWidth.setMax(containerWidth);
+        sbLeftHeight.setMax(containerHeight);
+        sbLeftX.setMax(POSITION_MAX);
+        sbLeftY.setMax(POSITION_MAX);
+        sbLeftRotation.setMax(360);
+        sbRightWidth.setMax(containerWidth);
+        sbRightHeight.setMax(containerHeight);
+        sbRightX.setMax(POSITION_MAX);
+        sbRightY.setMax(POSITION_MAX);
+        sbRightRotation.setMax(360);
+
+        sbLeftWidth.setProgress(leftValues[0]);
+        sbLeftHeight.setProgress(leftValues[1]);
+        // X和Y位置：实际值+OFFSET作为SeekBar的progress
+        sbLeftX.setProgress(leftValues[2] + POSITION_OFFSET);
+        sbLeftY.setProgress(leftValues[3] + POSITION_OFFSET);
+        sbLeftRotation.setProgress(leftValues[4]);
+        sbRightWidth.setProgress(rightValues[0]);
+        sbRightHeight.setProgress(rightValues[1]);
+        sbRightX.setProgress(rightValues[2] + POSITION_OFFSET);
+        sbRightY.setProgress(rightValues[3] + POSITION_OFFSET);
+        sbRightRotation.setProgress(rightValues[4]);
+
+        // 更新TextView显示（X和Y显示实际值：progress-OFFSET）
+        tvLeftWidthValue.setText(String.valueOf(leftValues[0]));
+        tvLeftHeightValue.setText(String.valueOf(leftValues[1]));
+        tvLeftXValue.setText(String.valueOf(leftValues[2]));
+        tvLeftYValue.setText(String.valueOf(leftValues[3]));
+        tvLeftRotationValue.setText(leftValues[4] + "°");
+        tvRightWidthValue.setText(String.valueOf(rightValues[0]));
+        tvRightHeightValue.setText(String.valueOf(rightValues[1]));
+        tvRightXValue.setText(String.valueOf(rightValues[2]));
+        tvRightYValue.setText(String.valueOf(rightValues[3]));
+        tvRightRotationValue.setText(rightValues[4] + "°");
+
+        // 创建弹窗
+        android.app.AlertDialog dialog = builder.create();
+
+        // 实时预览更新的Runnable
+        final Runnable previewUpdateRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (frameLeft == null || frameRight == null) return;
+                
+                int leftWidth = sbLeftWidth.getProgress();
+                int leftHeight = sbLeftHeight.getProgress();
+                // X和Y位置：SeekBar的progress-OFFSET作为实际值
+                int leftX = sbLeftX.getProgress() - POSITION_OFFSET;
+                int leftY = sbLeftY.getProgress() - POSITION_OFFSET;
+                int leftRotation = sbLeftRotation.getProgress();
+                int rightWidth = sbRightWidth.getProgress();
+                int rightHeight = sbRightHeight.getProgress();
+                int rightX = sbRightX.getProgress() - POSITION_OFFSET;
+                int rightY = sbRightY.getProgress() - POSITION_OFFSET;
+                int rightRotation = sbRightRotation.getProgress();
+
+                // 实时应用布局到视图（画框位置和大小保持默认值）
+                setViewPosition(frameLeft, defaultLeftX, defaultLeftY, defaultLeftWidth, defaultHeight);
+                setViewPosition(frameRight, defaultRightX, defaultRightY, defaultRightWidth, defaultHeight);
+
+                // 实时应用位置和大小（只调整画面和测试文字）
+                if (textureLeft != null) {
+                    textureLeft.setX(leftX);
+                    textureLeft.setY(leftY);
+                    android.widget.FrameLayout.LayoutParams leftParams = new android.widget.FrameLayout.LayoutParams(leftWidth, leftHeight);
+                    textureLeft.setLayoutParams(leftParams);
+                    // 延迟应用旋转，确保布局已更新
+                    textureLeft.post(() -> applyRotationWithScale(textureLeft, leftRotation));
+                }
+                if (textureRight != null) {
+                    textureRight.setX(rightX);
+                    textureRight.setY(rightY);
+                    android.widget.FrameLayout.LayoutParams rightParams = new android.widget.FrameLayout.LayoutParams(rightWidth, rightHeight);
+                    textureRight.setLayoutParams(rightParams);
+                    // 延迟应用旋转，确保布局已更新
+                    textureRight.post(() -> applyRotationWithScale(textureRight, rightRotation));
+                }
+            }
+        };
+
+        // SeekBar变化监听器
+        android.widget.SeekBar.OnSeekBarChangeListener seekBarChangeListener = new android.widget.SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(android.widget.SeekBar seekBar, int progress, boolean fromUser) {
+                // 更新对应的TextView
+                int id = seekBar.getId();
+                if (id == R.id.sb_left_width) {
+                    tvLeftWidthValue.setText(String.valueOf(progress));
+                } else if (id == R.id.sb_left_height) {
+                    tvLeftHeightValue.setText(String.valueOf(progress));
+                } else if (id == R.id.sb_left_x) {
+                    tvLeftXValue.setText(String.valueOf(progress - POSITION_OFFSET));
+                } else if (id == R.id.sb_left_y) {
+                    tvLeftYValue.setText(String.valueOf(progress - POSITION_OFFSET));
+                } else if (id == R.id.sb_left_rotation) {
+                    tvLeftRotationValue.setText(progress + "°");
+                } else if (id == R.id.sb_right_width) {
+                    tvRightWidthValue.setText(String.valueOf(progress));
+                } else if (id == R.id.sb_right_height) {
+                    tvRightHeightValue.setText(String.valueOf(progress));
+                } else if (id == R.id.sb_right_x) {
+                    tvRightXValue.setText(String.valueOf(progress - POSITION_OFFSET));
+                } else if (id == R.id.sb_right_y) {
+                    tvRightYValue.setText(String.valueOf(progress - POSITION_OFFSET));
+                } else if (id == R.id.sb_right_rotation) {
+                    tvRightRotationValue.setText(progress + "°");
+                }
+
+                // 实时更新预览
+                previewUpdateRunnable.run();
+            }
+
+            @Override
+            public void onStartTrackingTouch(android.widget.SeekBar seekBar) {}
+
+            @Override
+            public void onStopTrackingTouch(android.widget.SeekBar seekBar) {}
+        };
+
+        // 设置所有SeekBar的监听器
+        sbLeftWidth.setOnSeekBarChangeListener(seekBarChangeListener);
+        sbLeftHeight.setOnSeekBarChangeListener(seekBarChangeListener);
+        sbLeftX.setOnSeekBarChangeListener(seekBarChangeListener);
+        sbLeftY.setOnSeekBarChangeListener(seekBarChangeListener);
+        sbLeftRotation.setOnSeekBarChangeListener(seekBarChangeListener);
+        sbRightWidth.setOnSeekBarChangeListener(seekBarChangeListener);
+        sbRightHeight.setOnSeekBarChangeListener(seekBarChangeListener);
+        sbRightX.setOnSeekBarChangeListener(seekBarChangeListener);
+        sbRightY.setOnSeekBarChangeListener(seekBarChangeListener);
+        sbRightRotation.setOnSeekBarChangeListener(seekBarChangeListener);
+
+        // 设置保存按钮点击事件
+        Button btnSave = dialogView.findViewById(R.id.btn_save);
+        btnSave.setOnClickListener(v -> {
+            int leftWidth = sbLeftWidth.getProgress();
+            int leftHeight = sbLeftHeight.getProgress();
+            // X和Y位置：SeekBar的progress-OFFSET作为实际值
+            int leftX = sbLeftX.getProgress() - POSITION_OFFSET;
+            int leftY = sbLeftY.getProgress() - POSITION_OFFSET;
+            int leftRotation = sbLeftRotation.getProgress();
+            int rightWidth = sbRightWidth.getProgress();
+            int rightHeight = sbRightHeight.getProgress();
+            int rightX = sbRightX.getProgress() - POSITION_OFFSET;
+            int rightY = sbRightY.getProgress() - POSITION_OFFSET;
+            int rightRotation = sbRightRotation.getProgress();
+
+            if (mode.equals("front")) {
+                appConfig.setFrontWheelLeftViewParams(leftWidth, leftHeight, leftX, leftY, leftRotation);
+                appConfig.setFrontWheelRightViewParams(rightWidth, rightHeight, rightX, rightY, rightRotation);
+                Toast.makeText(context, "前轮模式设置已保存", Toast.LENGTH_SHORT).show();
+            } else {
+                appConfig.setRearWheelLeftViewParams(leftWidth, leftHeight, leftX, leftY, leftRotation);
+                appConfig.setRearWheelRightViewParams(rightWidth, rightHeight, rightX, rightY, rightRotation);
+                Toast.makeText(context, "后轮模式设置已保存", Toast.LENGTH_SHORT).show();
+            }
+
+            dialog.dismiss();
+        });
+
+        // 设置重置按钮点击事件
+        Button btnReset = dialogView.findViewById(R.id.btn_reset);
+        btnReset.setOnClickListener(v -> {
+            // 重置为对应模式的默认值
+            int resetLeftWidth, resetLeftHeight, resetLeftX, resetLeftY, resetLeftRotation;
+            int resetRightWidth, resetRightHeight, resetRightX, resetRightY, resetRightRotation;
+            
+            if (mode.equals("front")) {
+                resetLeftWidth = frontLeftWidth;
+                resetLeftHeight = frontLeftHeight;
+                resetLeftX = frontLeftX;
+                resetLeftY = frontLeftY;
+                resetLeftRotation = frontLeftRotation;
+                resetRightWidth = frontRightWidth;
+                resetRightHeight = frontRightHeight;
+                resetRightX = frontRightX;
+                resetRightY = frontRightY;
+                resetRightRotation = frontRightRotation;
+            } else {
+                resetLeftWidth = rearLeftWidth;
+                resetLeftHeight = rearLeftHeight;
+                resetLeftX = rearLeftX;
+                resetLeftY = rearLeftY;
+                resetLeftRotation = rearLeftRotation;
+                resetRightWidth = rearRightWidth;
+                resetRightHeight = rearRightHeight;
+                resetRightX = rearRightX;
+                resetRightY = rearRightY;
+                resetRightRotation = rearRightRotation;
+            }
+
+            sbLeftWidth.setProgress(resetLeftWidth);
+            sbLeftHeight.setProgress(resetLeftHeight);
+            // X和Y位置：实际值+OFFSET作为SeekBar的progress
+            sbLeftX.setProgress(resetLeftX + POSITION_OFFSET);
+            sbLeftY.setProgress(resetLeftY + POSITION_OFFSET);
+            sbLeftRotation.setProgress(resetLeftRotation);
+            sbRightWidth.setProgress(resetRightWidth);
+            sbRightHeight.setProgress(resetRightHeight);
+            sbRightX.setProgress(resetRightX + POSITION_OFFSET);
+            sbRightY.setProgress(resetRightY + POSITION_OFFSET);
+            sbRightRotation.setProgress(resetRightRotation);
+
+            // 更新TextView（X和Y显示实际值）
+            tvLeftWidthValue.setText(String.valueOf(resetLeftWidth));
+            tvLeftHeightValue.setText(String.valueOf(resetLeftHeight));
+            tvLeftXValue.setText(String.valueOf(resetLeftX));
+            tvLeftYValue.setText(String.valueOf(resetLeftY));
+            tvLeftRotationValue.setText(resetLeftRotation + "°");
+            tvRightWidthValue.setText(String.valueOf(resetRightWidth));
+            tvRightHeightValue.setText(String.valueOf(resetRightHeight));
+            tvRightXValue.setText(String.valueOf(resetRightX));
+            tvRightYValue.setText(String.valueOf(resetRightY));
+            tvRightRotationValue.setText(resetRightRotation + "°");
+
+            // 实时应用重置后的值
+            previewUpdateRunnable.run();
+
+            Toast.makeText(context, "已重置为默认值", Toast.LENGTH_SHORT).show();
+        });
+
+        // 设置弹窗背景透明度为15%
+        dialog.setOnShowListener(d -> {
+            View rootView = dialog.getWindow().getDecorView();
+            rootView.setBackgroundColor(android.graphics.Color.parseColor("#26000000"));
+        });
+
+        // 弹窗关闭时恢复原始布局（如果未保存）
+        dialog.setOnDismissListener(d -> {
+            // 重新应用当前模式的保存值
+            if (mode.equals("front")) {
+                Button btnFrontWheel = frameVehicleControl.findViewById(R.id.btn_front_wheel);
+                if (btnFrontWheel != null && btnFrontWheel.getTag() != null && (Boolean) btnFrontWheel.getTag()) {
+                    applyFrontWheelModeLayout();
+                } else {
+                    applyNormalModeLayout();
+                }
+            } else {
+                Button btnRearWheel = frameVehicleControl.findViewById(R.id.btn_rear_wheel);
+                if (btnRearWheel != null && btnRearWheel.getTag() != null && (Boolean) btnRearWheel.getTag()) {
+                    applyRearWheelModeLayout();
+                } else {
+                    applyNormalModeLayout();
+                }
+            }
+        });
+
+        dialog.show();
+    }
+
+    /**
+     * 应用前轮模式布局
+     * 初始值与普通模式相同
+     */
+    private void applyFrontWheelModeLayout() {
+        if (frameLeft == null || frameRight == null) return;
+
+        int containerWidth = containerCameras.getWidth();
+        int containerHeight = containerCameras.getHeight();
+        
+        AppLog.d(TAG, "前轮模式 - 容器尺寸: " + containerWidth + "x" + containerHeight);
+        
+        if (containerWidth == 0 || containerHeight == 0) {
+            AppLog.e(TAG, "前轮模式 - 容器尺寸为0，延迟重试");
+            containerCameras.post(this::applyFrontWheelModeLayout);
+            return;
+        }
+        
+        int halfHeight = (containerHeight - 20) / 2;
+        int padding = 10;
+        int vehicleControlWidth = 280;
+
+        // 前轮模式下显示车辆控制区域和左右视图
+        if (frameVehicleControl != null) {
+            frameVehicleControl.setVisibility(View.VISIBLE);
+        }
+        frameLeft.setVisibility(View.VISIBLE);
+        frameRight.setVisibility(View.VISIBLE);
+
+        // 前轮模式默认值
+        int defaultLeftWidth = 1120;
+        int defaultLeftHeight = 662;
+        int defaultLeftX = 10;
+        int defaultLeftY = 397;
+        int defaultLeftRotation = 270;
+        int defaultRightWidth = 1211;
+        int defaultRightHeight = 662;
+        int defaultRightX = -76;
+        int defaultRightY = 502;
+        int defaultRightRotation = 90;
+
+        // 获取保存的参数
+        int leftWidth = appConfig.getFrontWheelLeftWidth(defaultLeftWidth);
+        int leftHeight = appConfig.getFrontWheelLeftHeight(defaultLeftHeight);
+        int leftX = appConfig.getFrontWheelLeftX(defaultLeftX);
+        int leftY = appConfig.getFrontWheelLeftY(defaultLeftY);
+        int leftRotation = appConfig.getFrontWheelLeftRotation(defaultLeftRotation);
+
+        int rightWidth = appConfig.getFrontWheelRightWidth(defaultRightWidth);
+        int rightHeight = appConfig.getFrontWheelRightHeight(defaultRightHeight);
+        int rightX = appConfig.getFrontWheelRightX(defaultRightX);
+        int rightY = appConfig.getFrontWheelRightY(defaultRightY);
+        int rightRotation = appConfig.getFrontWheelRightRotation(defaultRightRotation);
+
+        // 应用布局到画框（画框保持默认位置和大小）
+        setViewPosition(frameLeft, defaultLeftX, defaultLeftY, defaultLeftWidth, defaultLeftHeight);
+        setViewPosition(frameRight, defaultRightX, defaultRightY, defaultRightWidth, defaultRightHeight);
+
+        // 应用参数到画面（位置、大小、旋转）
+        // 注意：画面位置使用保存的绝对位置，与实时预览一致
+        if (textureLeft != null) {
+            textureLeft.setX(leftX);
+            textureLeft.setY(leftY);
+            android.widget.FrameLayout.LayoutParams leftParams = new android.widget.FrameLayout.LayoutParams(leftWidth, leftHeight);
+            textureLeft.setLayoutParams(leftParams);
+            // 延迟应用旋转，确保布局已更新
+            textureLeft.post(() -> applyRotationWithScale(textureLeft, leftRotation));
+        }
+        if (textureRight != null) {
+            textureRight.setX(rightX);
+            textureRight.setY(rightY);
+            android.widget.FrameLayout.LayoutParams rightParams = new android.widget.FrameLayout.LayoutParams(rightWidth, rightHeight);
+            textureRight.setLayoutParams(rightParams);
+            // 延迟应用旋转，确保布局已更新
+            textureRight.post(() -> applyRotationWithScale(textureRight, rightRotation));
+        }
+
+        AppLog.d(TAG, "前轮模式布局已应用 - 左视图: (" + leftX + "," + leftY + ") " + leftWidth + "x" + leftHeight + ", 右视图: (" + rightX + "," + rightY + ") " + rightWidth + "x" + rightHeight);
+    }
+
+    /**
+     * 应用后轮模式布局
+     * 初始值与普通模式相同
+     */
+    private void applyRearWheelModeLayout() {
+        if (frameLeft == null || frameRight == null) return;
+
+        int containerWidth = containerCameras.getWidth();
+        int containerHeight = containerCameras.getHeight();
+        
+        AppLog.d(TAG, "后轮模式 - 容器尺寸: " + containerWidth + "x" + containerHeight);
+        
+        if (containerWidth == 0 || containerHeight == 0) {
+            AppLog.e(TAG, "后轮模式 - 容器尺寸为0，延迟重试");
+            containerCameras.post(this::applyRearWheelModeLayout);
+            return;
+        }
+        
+        int halfHeight = (containerHeight - 20) / 2;
+        int padding = 10;
+        int vehicleControlWidth = 280;
+
+        // 后轮模式下显示车辆控制区域和左右视图
+        if (frameVehicleControl != null) {
+            frameVehicleControl.setVisibility(View.VISIBLE);
+        }
+        frameLeft.setVisibility(View.VISIBLE);
+        frameRight.setVisibility(View.VISIBLE);
+
+        // 后轮模式默认值
+        int defaultLeftWidth = 1120;
+        int defaultLeftHeight = 662;
+        int defaultLeftX = 10;
+        int defaultLeftY = -624;
+        int defaultLeftRotation = 270;
+        int defaultRightWidth = 1298;
+        int defaultRightHeight = 662;
+        int defaultRightX = -164;
+        int defaultRightY = -702;
+        int defaultRightRotation = 90;
+
+        // 获取保存的参数
+        int leftWidth = appConfig.getRearWheelLeftWidth(defaultLeftWidth);
+        int leftHeight = appConfig.getRearWheelLeftHeight(defaultLeftHeight);
+        int leftX = appConfig.getRearWheelLeftX(defaultLeftX);
+        int leftY = appConfig.getRearWheelLeftY(defaultLeftY);
+        int leftRotation = appConfig.getRearWheelLeftRotation(defaultLeftRotation);
+
+        int rightWidth = appConfig.getRearWheelRightWidth(defaultRightWidth);
+        int rightHeight = appConfig.getRearWheelRightHeight(defaultRightHeight);
+        int rightX = appConfig.getRearWheelRightX(defaultRightX);
+        int rightY = appConfig.getRearWheelRightY(defaultRightY);
+        int rightRotation = appConfig.getRearWheelRightRotation(defaultRightRotation);
+
+        // 应用布局到画框（画框保持默认位置和大小）
+        setViewPosition(frameLeft, defaultLeftX, defaultLeftY, defaultLeftWidth, defaultLeftHeight);
+        setViewPosition(frameRight, defaultRightX, defaultRightY, defaultRightWidth, defaultRightHeight);
+
+        // 应用参数到画面（位置、大小、旋转）
+        // 注意：画面位置使用保存的绝对位置，与实时预览一致
+        if (textureLeft != null) {
+            textureLeft.setX(leftX);
+            textureLeft.setY(leftY);
+            android.widget.FrameLayout.LayoutParams leftParams = new android.widget.FrameLayout.LayoutParams(leftWidth, leftHeight);
+            textureLeft.setLayoutParams(leftParams);
+            // 延迟应用旋转，确保布局已更新
+            textureLeft.post(() -> applyRotationWithScale(textureLeft, leftRotation));
+        }
+        if (textureRight != null) {
+            textureRight.setX(rightX);
+            textureRight.setY(rightY);
+            android.widget.FrameLayout.LayoutParams rightParams = new android.widget.FrameLayout.LayoutParams(rightWidth, rightHeight);
+            textureRight.setLayoutParams(rightParams);
+            // 延迟应用旋转，确保布局已更新
+            textureRight.post(() -> applyRotationWithScale(textureRight, rightRotation));
+        }
+
+        AppLog.d(TAG, "后轮模式布局已应用 - 左视图: (" + leftX + "," + leftY + ") " + leftWidth + "x" + leftHeight + ", 右视图: (" + rightX + "," + rightY + ") " + rightWidth + "x" + rightHeight);
+    }
+
+    /**
+     * 应用普通模式布局（默认模式）
+     * 普通模式下保持车辆控制区域可见
+     */
+    private void applyNormalModeLayout() {
+        if (frameLeft == null || frameRight == null) return;
+
+        int containerWidth = containerCameras.getWidth();
+        int containerHeight = containerCameras.getHeight();
+        int halfWidth = (containerWidth - 20) / 2;
+        int halfHeight = (containerHeight - 20) / 2;
+        int padding = 10;
+        int vehicleControlWidth = 280;
+
+        // 普通模式下保持车辆控制区域和左右视图可见
+        if (frameVehicleControl != null) {
+            frameVehicleControl.setVisibility(View.VISIBLE);
+        }
+        frameLeft.setVisibility(View.VISIBLE);
+        frameRight.setVisibility(View.VISIBLE);
+
+        // 普通模式下左右视图宽度，右视图右边缘与后视图对齐
+        // 后视图右边缘 = containerWidth - padding
+        // 右视图右边缘 = rightX + rightWidth = containerWidth - padding
+        // rightX = padding * 3 + leftWidth + vehicleControlWidth
+        // 所以 rightWidth = containerWidth - padding - rightX = containerWidth - padding - (padding * 3 + leftWidth + vehicleControlWidth)
+        // 简化：leftWidth + rightWidth + vehicleControlWidth + padding * 4 = containerWidth
+        // 让 leftWidth = rightWidth，则 2 * leftWidth = containerWidth - vehicleControlWidth - padding * 4
+        int totalViewWidth = containerWidth - vehicleControlWidth - padding * 4;
+        int defaultLeftWidth = totalViewWidth / 2;
+        int defaultRightWidth = totalViewWidth / 2;
+        int defaultHeight = halfHeight;
+        int defaultLeftX = padding;
+        int defaultLeftY = padding * 2 + halfHeight;
+        int defaultRightX = padding * 2 + defaultLeftWidth + vehicleControlWidth;
+        int defaultRightY = padding * 2 + halfHeight;
+
+        // 获取保存的参数
+        int leftWidth = appConfig.getNormalLeftWidth(defaultLeftWidth);
+        int leftHeight = appConfig.getNormalLeftHeight(defaultHeight);
+        int leftX = appConfig.getNormalLeftX(defaultLeftX);
+        int leftY = appConfig.getNormalLeftY(defaultLeftY);
+        int leftRotation = appConfig.getNormalLeftRotation(0);
+
+        int rightWidth = appConfig.getNormalRightWidth(defaultRightWidth);
+        int rightHeight = appConfig.getNormalRightHeight(defaultHeight);
+        int rightX = appConfig.getNormalRightX(defaultRightX);
+        int rightY = appConfig.getNormalRightY(defaultRightY);
+        int rightRotation = appConfig.getNormalRightRotation(0);
+
+        // 应用布局到画框
+        setViewPosition(frameLeft, leftX, leftY, leftWidth, leftHeight);
+        setViewPosition(frameRight, rightX, rightY, rightWidth, rightHeight);
+
+        // 应用参数到画面（位置、大小、旋转）
+        if (textureLeft != null) {
+            applyRotationWithScale(textureLeft, leftRotation);
+            textureLeft.setX(0);
+            textureLeft.setY(0);
+            android.widget.FrameLayout.LayoutParams leftParams = new android.widget.FrameLayout.LayoutParams(leftWidth, leftHeight);
+            textureLeft.setLayoutParams(leftParams);
+        }
+        if (textureRight != null) {
+            applyRotationWithScale(textureRight, rightRotation);
+            textureRight.setX(0);
+            textureRight.setY(0);
+            android.widget.FrameLayout.LayoutParams rightParams = new android.widget.FrameLayout.LayoutParams(rightWidth, rightHeight);
+            textureRight.setLayoutParams(rightParams);
+        }
+
+        AppLog.d(TAG, "普通模式布局已应用");
+    }
+
+    /**
+     * 设置按钮为选中状态
+     */
+    private void setButtonSelected(Button button) {
+        button.setTextColor(android.graphics.Color.parseColor("#FFFFFF"));
+        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                android.graphics.Color.parseColor("#007AFF")));
+    }
+
+    /**
+     * 设置按钮为未选中状态
+     */
+    private void setButtonUnselected(Button button) {
+        button.setTextColor(android.graphics.Color.parseColor("#808080"));
+        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                android.graphics.Color.parseColor("#00000000")));
+    }
+
     /**
      * 应用裁剪效果
      * 使用 clipBounds 来裁剪 TextureView 的显示区域
@@ -820,6 +1531,7 @@ public class CustomLayoutManager {
         saveViewLayout(frameBack, "back");
         saveViewLayout(frameLeft, "left");
         saveViewLayout(frameRight, "right");
+        saveViewLayout(frameVehicleControl, "vehicle");
         saveViewLayout(buttonContainer, "buttons");
         
         // 保存裁剪数据
@@ -1033,32 +1745,50 @@ public class CustomLayoutManager {
         int halfWidth = (containerWidth - padding * 3) / 2;
         int halfHeight = (containerHeight - padding * 3) / 2;
         
-        // 计算可见摄像头数量
-        int visibleCount = 0;
-        if (frameFront != null && frameFront.getVisibility() == View.VISIBLE) visibleCount++;
-        if (frameBack != null && frameBack.getVisibility() == View.VISIBLE) visibleCount++;
-        if (frameLeft != null && frameLeft.getVisibility() == View.VISIBLE) visibleCount++;
-        if (frameRight != null && frameRight.getVisibility() == View.VISIBLE) visibleCount++;
-        
-        if (visibleCount == 1) {
+        // 根据配置的摄像头数量设置布局
+        if (cameraCount == 1) {
             // 1摄：全屏
-            if (frameFront != null && frameFront.getVisibility() == View.VISIBLE) {
+            if (frameFront != null) {
+                frameFront.setVisibility(View.VISIBLE);
                 setViewPosition(frameFront, padding, padding, containerWidth - padding * 2, containerHeight - padding * 2);
             }
-        } else if (visibleCount == 2) {
+        } else if (cameraCount == 2) {
             // 2摄：左右并排
-            if (frameFront != null && frameFront.getVisibility() == View.VISIBLE) {
+            if (frameFront != null) {
+                frameFront.setVisibility(View.VISIBLE);
                 setViewPosition(frameFront, padding, padding, halfWidth, containerHeight - padding * 2);
             }
-            if (frameBack != null && frameBack.getVisibility() == View.VISIBLE) {
+            if (frameBack != null) {
+                frameBack.setVisibility(View.VISIBLE);
                 setViewPosition(frameBack, padding * 2 + halfWidth, padding, halfWidth, containerHeight - padding * 2);
             }
         } else {
-            // 4摄：四宫格
-            if (frameFront != null) setViewPosition(frameFront, padding, padding, halfWidth, halfHeight);
-            if (frameBack != null) setViewPosition(frameBack, padding * 2 + halfWidth, padding, halfWidth, halfHeight);
-            if (frameLeft != null) setViewPosition(frameLeft, padding, padding * 2 + halfHeight, halfWidth, halfHeight);
-            if (frameRight != null) setViewPosition(frameRight, padding * 2 + halfWidth, padding * 2 + halfHeight, halfWidth, halfHeight);
+            // 4摄：四宫格，左右视图中间有车辆控制区域
+            if (frameFront != null) {
+                frameFront.setVisibility(View.VISIBLE);
+                setViewPosition(frameFront, padding, padding, halfWidth, halfHeight);
+            }
+            if (frameBack != null) {
+                frameBack.setVisibility(View.VISIBLE);
+                setViewPosition(frameBack, padding * 2 + halfWidth, padding, halfWidth, halfHeight);
+            }
+            // 左视图宽度减少120dp，为车辆控制区域留出空间
+            int leftViewWidth = halfWidth - 140;
+            int rightViewWidth = halfWidth - 140;
+            int vehicleControlWidth = 280;
+            if (frameLeft != null) {
+                frameLeft.setVisibility(View.VISIBLE);
+                setViewPosition(frameLeft, padding, padding * 2 + halfHeight, leftViewWidth, halfHeight);
+            }
+            // 车辆控制区域放在左右视图中间
+            if (frameVehicleControl != null) {
+                frameVehicleControl.setVisibility(View.VISIBLE);
+                setViewPosition(frameVehicleControl, padding * 2 + leftViewWidth, padding * 2 + halfHeight + (halfHeight - 520) / 2, vehicleControlWidth, 520);
+            }
+            if (frameRight != null) {
+                frameRight.setVisibility(View.VISIBLE);
+                setViewPosition(frameRight, padding * 3 + leftViewWidth + vehicleControlWidth, padding * 2 + halfHeight, rightViewWidth, halfHeight);
+            }
         }
     }
     
@@ -1081,6 +1811,7 @@ public class CustomLayoutManager {
         showView(frameBack, "back");
         showView(frameLeft, "left");
         showView(frameRight, "right");
+        showView(frameVehicleControl, "vehicle");
         showView(buttonContainer, "buttons");
     }
     
@@ -1126,6 +1857,7 @@ public class CustomLayoutManager {
                     restoreViewState(frameBack, "back");
                     restoreViewState(frameLeft, "left");
                     restoreViewState(frameRight, "right");
+                    restoreViewState(frameVehicleControl, "vehicle");
                     restoreViewState(buttonContainer, "buttons");
                     
                     // 延迟应用裁剪并显示容器（等待 TextureView 有有效尺寸）
@@ -1315,6 +2047,11 @@ public class CustomLayoutManager {
                         
                         // 更新布局数据
                         layoutData.setPosition(viewId, snapped[0], snapped[1]);
+                        
+                        // 保存到对应模式的 appConfig 参数
+                        savePositionToCurrentMode(viewId, (int) snapped[0], (int) snapped[1], 
+                                targetView.getWidth(), targetView.getHeight());
+                        
                         AppLog.d(TAG, viewId + " 移动到 (" + (int) snapped[0] + ", " + (int) snapped[1] + ")");
                     }
                     return true;
@@ -1348,6 +2085,48 @@ public class CustomLayoutManager {
          */
         private float snapToGrid(float value) {
             return Math.round(value / GRID_SIZE) * GRID_SIZE;
+        }
+    }
+
+    /**
+     * 保存位置到当前模式的 appConfig 参数
+     * 根据当前选中的模式（前轮/后轮/普通）保存到对应的参数
+     */
+    private void savePositionToCurrentMode(String viewId, int x, int y, int width, int height) {
+        // 判断当前模式
+        Button btnFrontWheel = null;
+        Button btnRearWheel = null;
+        if (frameVehicleControl != null) {
+            btnFrontWheel = frameVehicleControl.findViewById(R.id.btn_front_wheel);
+            btnRearWheel = frameVehicleControl.findViewById(R.id.btn_rear_wheel);
+        }
+
+        boolean isFrontWheelMode = btnFrontWheel != null && btnFrontWheel.getTag() != null && (Boolean) btnFrontWheel.getTag();
+        boolean isRearWheelMode = btnRearWheel != null && btnRearWheel.getTag() != null && (Boolean) btnRearWheel.getTag();
+
+        // 只保存左视图和右视图的位置
+        if ("left".equals(viewId)) {
+            if (isFrontWheelMode) {
+                appConfig.setFrontWheelLeftViewParams(width, height, x, y, appConfig.getFrontWheelLeftRotation(0));
+                AppLog.d(TAG, "前轮模式左视图参数已保存");
+            } else if (isRearWheelMode) {
+                appConfig.setRearWheelLeftViewParams(width, height, x, y, appConfig.getRearWheelLeftRotation(0));
+                AppLog.d(TAG, "后轮模式左视图参数已保存");
+            } else {
+                appConfig.setNormalLeftViewParams(width, height, x, y, appConfig.getNormalLeftRotation(0));
+                AppLog.d(TAG, "普通模式左视图参数已保存");
+            }
+        } else if ("right".equals(viewId)) {
+            if (isFrontWheelMode) {
+                appConfig.setFrontWheelRightViewParams(width, height, x, y, appConfig.getFrontWheelRightRotation(0));
+                AppLog.d(TAG, "前轮模式右视图参数已保存");
+            } else if (isRearWheelMode) {
+                appConfig.setRearWheelRightViewParams(width, height, x, y, appConfig.getRearWheelRightRotation(0));
+                AppLog.d(TAG, "后轮模式右视图参数已保存");
+            } else {
+                appConfig.setNormalRightViewParams(width, height, x, y, appConfig.getNormalRightRotation(0));
+                AppLog.d(TAG, "普通模式右视图参数已保存");
+            }
         }
     }
 
